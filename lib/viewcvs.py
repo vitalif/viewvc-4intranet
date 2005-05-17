@@ -25,7 +25,7 @@
 # -----------------------------------------------------------------------
 #
 
-__version__ = '1.0-dev'
+__version__ = '0.9.3'
 
 #########################################################################
 #
@@ -248,9 +248,10 @@ def redirect(location):
   sys.exit(0)
 
 def error(msg, status='500 Internal Server Error'):
+  print 'Content-type: text/html'
   print 'Status:', status
   print
-  print msg
+  print cgi.escape(msg)
   sys.exit(0)
 
 def generate_page(request, tname, data):
@@ -1105,7 +1106,8 @@ def view_directory(request):
   view_tag = query_dict.get('only_with_tag')
   hideattic = int(query_dict.get('hideattic'))  ### watch for errors in int()?
   sortby = query_dict.get('sortby', 'file')
-
+  if not re.match('^[a-z]+$', sortby):
+    raise 'illegal value for sortby parameter'
   search_re = query_dict.get('search')
  
   # Search current directory
@@ -1841,8 +1843,8 @@ def process_checkout(full_name, where, query_dict, default_mime_type):
 
   mime_type = query_dict.get('content-type')
   if mime_type:
-    ### validate it?
-    pass
+    if not re.match('^[-_.a-zA-Z0-9/]+$', mime_type):
+      raise 'illegal value for content-type parameter'
   else:
     mime_type = default_mime_type
 
@@ -2184,6 +2186,8 @@ class DiffSource:
     self.left = None
     self.right = None
     self.state = 'no-changes'
+    self.left_col = [ ]
+    self.right_col = [ ]
 
   def __getitem__(self, idx):
     if idx == self.idx:
@@ -2199,7 +2203,6 @@ class DiffSource:
       if item:
         self.idx = idx
         self.last = item
-        open('/tmp/log','a').write('idx=%d  item=%s\n' % (idx,vars(item)))
         return item
 
   def _get_row(self):
@@ -2214,9 +2217,10 @@ class DiffSource:
       self.save_line = None
     else:
       line = self.fp.readline()
+
     if not line:
       if self.state == 'no-changes':
-        self.state == 'done'
+        self.state = 'done'
         return _item(type='no-changes')
 
       # see if there are lines to flush
@@ -2450,6 +2454,9 @@ def generate_tarball(out, relative, directory, tag, stack=[]):
   for file, pathname, isdir in get_file_data(directory):
     if pathname == _UNREADABLE_MARKER:
       continue
+    if (file == 'CVSROOT' and cfg.options.hide_cvsroot) \
+           or cfg.is_forbidden(file):
+      continue
     if isdir:
       subdirs.append(file)
     else:
@@ -2607,10 +2614,12 @@ def main():
   else:
     # if the file is in the Attic, then redirect
     idx = string.rfind(full_name, '/')
-    attic_name = full_name[:idx] + '/Attic' + full_name[idx:] + ',v'
-    if os.path.isfile(attic_name):
+    attic_name = full_name[:idx] + '/Attic' + full_name[idx:]
+    if os.path.isfile(attic_name + ',v') or \
+       full_name[-5:] == '.diff' and os.path.isfile(attic_name[:-5] + ',v'):
       idx = string.rfind(url, '/')
-      redirect(url[:idx] + '/Attic' + url[idx:])
+      redirect(url[:idx] + '/Attic' + url[idx:] + \
+	       '?' + compat.urlencode(query_dict))
 
     error('%s: unknown location' % request.url, '404 Not Found')
 
