@@ -30,13 +30,16 @@ error = "cvsdb error"
 ## complient database interface
 
 class CheckinDatabase:
-    def __init__(self, host, port, user, passwd, database, row_limit):
+    def __init__(self, host, port, socket, user, passwd, database, row_limit, min_relevance):
         self._host = host
         self._port = port
+        self._socket = socket
         self._user = user
         self._passwd = passwd
         self._database = database
         self._row_limit = row_limit
+        self._min_relevance = min_relevance
+        self.text_query = ""
 
         ## database lookup caches
         self._get_cache = {}
@@ -45,7 +48,7 @@ class CheckinDatabase:
 
     def Connect(self):
         self.db = dbi.connect(
-            self._host, self._port, self._user, self._passwd, self._database)
+            self._host, self._port, self._socket, self._user, self._passwd, self._database)
         cursor = self.db.cursor()
         cursor.execute("SET AUTOCOMMIT=1")
 
@@ -177,6 +180,9 @@ class CheckinDatabase:
     def GetRepository(self, id):
         return self.get("repositories", "repository", id)
 
+    def GetRepositoryList(self):
+        return self.get_list("repositories", repository)
+
     def SQLGetDescriptionID(self, description, auto_set = 1):
         ## lame string hash, blame Netscape -JMP
         hash = len(description)
@@ -298,14 +304,22 @@ class CheckinDatabase:
                 match = " REGEXP "
             elif query_entry.match == "notregex":
                 match = " NOT REGEXP "
-
             sqlList.append("%s%s%s" % (field, match, self.db.literal(data)))
 
         return "(%s)" % (string.join(sqlList, " OR "))
 
     def CreateSQLQueryString(self, query):
+        fields = ["checkins.*"]
         tableList = [("checkins", None)]
         condList = []
+        
+        if len(query.text_query):
+            tableList.append(("descs", "(descs.id=checkins.descid)"))
+            temp = "MATCH (descs.description) AGAINST (%s" % (self.db.literal(query.text_query))
+            condList.append("%s IN BOOLEAN MODE) > %s" % (temp, self._min_relevance))
+            fields.append("%s) AS relevance" % temp)
+        else:
+            fields.append("'' AS relevance")
 
         if len(query.repository_list):
             tableList.append(("repositories",
@@ -357,6 +371,8 @@ class CheckinDatabase:
         elif query.sort == "file":
             tableList.append(("files", "(checkins.fileid=files.id)"))
             order_by = "ORDER BY files.file,descid"
+        elif query.sort == "relevance" and len(query.text_query):
+            order_by = "ORDER BY relevance DESC,checkins.ci_when DESC,descid"
 
         ## exclude duplicates from the table list, and split out join
         ## conditions from table names.  In future, the join conditions
@@ -369,6 +385,7 @@ class CheckinDatabase:
                 tables.append(table)
                 if cond is not None: joinConds.append(cond)
 
+        fields = string.join(fields, ",")
         tables = string.join(tables, ",")
         conditions = string.join(joinConds + condList, " AND ")
         conditions = conditions and "WHERE %s" % conditions
@@ -381,32 +398,32 @@ class CheckinDatabase:
         elif self._row_limit:
             limit = "LIMIT %s" % (str(self._row_limit))
 
-        sql = "SELECT checkins.* FROM %s %s %s %s" % (
-            tables, conditions, order_by, limit)
+        sql = "SELECT %s FROM %s %s %s %s" % (
+            fields, tables, conditions, order_by, limit)
 
         return sql
-    
+
     def RunQuery(self, query):
         sql = self.CreateSQLQueryString(query)
         cursor = self.db.cursor()
         cursor.execute(sql)
-        
+
         while 1:
             row = cursor.fetchone()
             if not row:
                 break
-            
+
             (dbType, dbCI_When, dbAuthorID, dbRepositoryID, dbDirID,
              dbFileID, dbRevision, dbStickyTag, dbBranchID, dbAddedLines,
-             dbRemovedLines, dbDescID) = row
+             dbRemovedLines, dbDescID, dbRelevance) = row
 
             commit = LazyCommit(self)
             if dbType == 'Add':
-              commit.SetTypeAdd()
+                commit.SetTypeAdd()
             elif dbType == 'Remove':
-              commit.SetTypeRemove()
+                commit.SetTypeRemove()
             else:
-              commit.SetTypeChange()
+                commit.SetTypeChange()
             commit.SetTime(dbi.TicksFromDateTime(dbCI_When))
             commit.SetFileID(dbFileID)
             commit.SetDirectoryID(dbDirID)
@@ -417,6 +434,7 @@ class CheckinDatabase:
             commit.SetPlusCount(dbAddedLines)
             commit.SetMinusCount(dbRemovedLines)
             commit.SetDescriptionID(dbDescID)
+            commit.SetRelevance(dbRelevance)
 
             query.AddCommit(commit)
 
@@ -505,6 +523,7 @@ class Commit:
         self.__pluscount = ''
         self.__minuscount = ''
         self.__description = ''
+        self.__relevance = ''
         self.__gmt_time = 0.0
         self.__type = Commit.CHANGE
 
@@ -572,6 +591,12 @@ class Commit:
 
     def GetDescription(self):
         return self.__description
+
+    def SetRelevance(self, relevance):
+        self.__relevance = relevance
+
+    def GetRelevance(self):
+        return self.__relevance
 
     def SetTypeChange(self):
         self.__type = Commit.CHANGE
@@ -675,6 +700,7 @@ class CheckinDatabaseQuery:
         self.file_list = []
         self.author_list = []
         self.comment_list = []
+        self.text_query = ""
 
         ## date range in DBI 2.0 timedate objects
         self.from_date = None
@@ -689,6 +715,9 @@ class CheckinDatabaseQuery:
         ## commit_cb provides a callback for commits as they
         ## are added
         self.commit_cb = None
+
+    def SetTextQuery(self, query):
+        self.text_query = query
 
     def SetRepository(self, repository, match = "exact"):
         self.repository_list.append(QueryEntry(repository, match))
@@ -705,7 +734,7 @@ class CheckinDatabaseQuery:
     def SetAuthor(self, author, match = "exact"):
         self.author_list.append(QueryEntry(author, match))
 
-    def SetComment(self, comment, match = "exact"):
+    def SetComment(self, comment, match = "fulltext"):
         self.comment_list.append(QueryEntry(comment, match))
 
     def SetSortMethod(self, sort):
@@ -752,8 +781,8 @@ def ConnectDatabase(cfg, readonly=0):
     else:
         user = cfg.cvsdb.user
         passwd = cfg.cvsdb.passwd
-    db = CheckinDatabase(cfg.cvsdb.host, cfg.cvsdb.port, user, passwd,
-                         cfg.cvsdb.database_name, cfg.cvsdb.row_limit)
+    db = CheckinDatabase(cfg.cvsdb.host, cfg.cvsdb.port, cfg.cvsdb.socket, user, passwd,
+                         cfg.cvsdb.database_name, cfg.cvsdb.row_limit, cfg.cvsdb.fulltext_min_relevance)
     db.Connect()
     return db
 

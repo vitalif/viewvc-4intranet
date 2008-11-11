@@ -107,6 +107,11 @@ Browse Directory</a></p>
     <td>
       <input type="text" name="comment" value="[comment]" /><br />
       <label for="comment_match_exact">
+        <input type="radio" name="comment_match" id="comment_match_fulltext"
+           value="fulltext" [is comment_match "fulltext"]checked=""[end] />
+        Search full-text
+      </label>
+      <label for="comment_match_exact">
         <input type="radio" name="comment_match" id="comment_match_exact"
            value="exact" [is comment_match "exact"]checked=""[end] />
         Exact match

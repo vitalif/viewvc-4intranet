@@ -40,12 +40,22 @@ class FormData:
         self.file = ""
         self.who = ""
         self.sortby = ""
+        self.textquery = ""
         self.date = ""
         self.hours = 0
 
         self.decode_thyself(form)
         
     def decode_thyself(self, form):
+        try:
+            self.textquery = string.strip(form["textquery"].value)
+        except KeyError:
+            pass
+        except TypeError:
+            pass
+        else:
+            self.valid = 1
+        
         try:
             self.repository = string.strip(form["repository"].value)
         except KeyError:
@@ -245,10 +255,15 @@ def form_to_cvsdb_query(form_data):
             cmd = decode_command(cmd)
             query.SetAuthor(str, cmd)
 
+    if form_data.textquery:
+        query.SetTextQuery(form_data.textquery)
+
     if form_data.sortby == "author":
         query.SetSortMethod("author")
     elif form_data.sortby == "file":
         query.SetSortMethod("file")
+    elif form_data.sortby == "relevance" and form_data.textquery:
+        query.SetSortMethod("relevance")
     else:
         query.SetSortMethod("date")
 
@@ -344,6 +359,7 @@ def build_commit(server, cfg, desc, files, cvsroots, viewvc_link):
             flink = '[%s] %s' % (repository, file)
             dlink = None
 
+        ob.relevance = commit.GetRelevance()
         ob.files.append(_item(date=ctime,
                               author=commit.GetAuthor(),
                               link=flink,
@@ -357,9 +373,8 @@ def build_commit(server, cfg, desc, files, cvsroots, viewvc_link):
 
     return ob
 
-def run_query(server, cfg, form_data, viewvc_link):
+def run_query(server, cfg, db, form_data, viewvc_link):
     query = form_to_cvsdb_query(form_data)
-    db = cvsdb.ConnectDatabaseReadOnly(cfg)
     db.RunQuery(query)
 
     if not query.commit_list:
@@ -405,8 +420,9 @@ def main(server, cfg, viewvc_link):
     form = server.FieldStorage()
     form_data = FormData(form)
 
+    db = cvsdb.ConnectDatabaseReadOnly(cfg)
     if form_data.valid:
-        commits = run_query(server, cfg, form_data, viewvc_link)
+        commits = run_query(server, cfg, db, form_data, viewvc_link)
         query = None
     else:
         commits = [ ]
@@ -419,6 +435,7 @@ def main(server, cfg, viewvc_link):
       'address' : cfg.general.address,
       'vsn' : viewvc.__version__,
 
+      'textquery' : server.escape(form_data.textquery, 1),
       'repository' : server.escape(form_data.repository, 1),
       'branch' : server.escape(form_data.branch, 1),
       'directory' : server.escape(form_data.directory, 1),
@@ -435,12 +452,15 @@ def main(server, cfg, viewvc_link):
       'commits' : commits,
       'num_commits' : len(commits),
       'rss_href' : None,
+      'repositories' : db.GetRepositoryList(),
       }
 
     if form_data.hours:
       data['hours'] = form_data.hours
     else:
       data['hours'] = 2
+    
+    
 
     server.header()
 

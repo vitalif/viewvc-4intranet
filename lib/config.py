@@ -19,7 +19,9 @@ import os
 import string
 import ConfigParser
 import fnmatch
-
+import vclib
+import vclib.ccvs
+import vclib.svn
 
 #########################################################################
 #
@@ -61,6 +63,34 @@ class Config:
 
     if rootname:
       self._process_root_options(self.parser, rootname)
+    self.expand_root_parents()
+
+  def expand_root_parents(self):
+    """Expand the configured root parents into individual roots."""
+
+    # Each item in root_parents is a "directory : repo_type" string.
+    for pp in self.general.root_parents:
+      pos = string.rfind(pp, ':')
+      if pos < 0:
+        raise debug.ViewVCException(
+          "The path '%s' in 'root_parents' does not include a "
+          "repository type." % (pp))
+
+      repo_type = string.strip(pp[pos+1:])
+      pp = os.path.normpath(string.strip(pp[:pos]))
+
+      if repo_type == 'cvs':
+        roots = vclib.ccvs.expand_root_parent(pp)
+        if self.options.hide_cvsroot and roots.has_key('CVSROOT'):
+          del roots['CVSROOT']
+        self.general.cvs_roots.update(roots)
+      elif repo_type == 'svn':
+        roots = vclib.svn.expand_root_parent(pp)
+        self.general.svn_roots.update(roots)
+      else:
+        raise debug.ViewVCException(
+          "The path '%s' in 'root_parents' has an unrecognized "
+          "repository type." % (pp))
 
   def load_kv_files(self, language):
     kv = _sub_config()
@@ -263,6 +293,7 @@ class Config:
     self.cvsdb.enabled = 0
     self.cvsdb.host = ''
     self.cvsdb.port = 3306
+    self.cvsdb.socket = ''
     self.cvsdb.database_name = ''
     self.cvsdb.user = ''
     self.cvsdb.passwd = ''
@@ -271,6 +302,7 @@ class Config:
     self.cvsdb.row_limit = 1000
     self.cvsdb.rss_row_limit = 100
     self.cvsdb.check_database_for_root = 0
+    self.cvsdb.fulltext_min_relevance = 0.2
 
 def _startswith(somestr, substr):
   return somestr[:len(substr)] == substr

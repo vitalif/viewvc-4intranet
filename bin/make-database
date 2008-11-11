@@ -71,7 +71,8 @@ CREATE TABLE descs (
   description text,
   hash bigint(20) DEFAULT '0' NOT NULL,
   PRIMARY KEY (id),
-  KEY hash (hash)
+  KEY hash (hash),
+  FULLTEXT KEY description (description)
 ) TYPE=MyISAM;
 
 DROP TABLE IF EXISTS dirs;

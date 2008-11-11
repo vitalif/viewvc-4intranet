@@ -1631,10 +1631,9 @@ def view_roots(request):
   if 'roots' not in request.cfg.options.allowed_views:
     raise debug.ViewVCException('Root listing view is disabled',
                                 '403 Forbidden')
-  
+
   # add in the roots for the selection
   roots = []
-  expand_root_parents(request.cfg)
   allroots = list_roots(request)
   if len(allroots):
     rootnames = allroots.keys()
@@ -3330,7 +3329,7 @@ def view_queryform(request):
   data['who'] = request.query_dict.get('who', '')
   data['who_match'] = request.query_dict.get('who_match', 'exact')
   data['comment'] = request.query_dict.get('comment', '')
-  data['comment_match'] = request.query_dict.get('comment_match', 'exact')
+  data['comment_match'] = request.query_dict.get('comment_match', 'fulltext')
   data['querysort'] = request.query_dict.get('querysort', 'date')
   data['date'] = request.query_dict.get('date', 'hours')
   data['hours'] = request.query_dict.get('hours', '2')
@@ -3645,7 +3644,7 @@ def view_query(request):
   who = request.query_dict.get('who', '')
   who_match = request.query_dict.get('who_match', 'exact')
   comment = request.query_dict.get('comment', '')
-  comment_match = request.query_dict.get('comment_match', 'exact')
+  comment_match = request.query_dict.get('comment_match', 'fulltext')
   querysort = request.query_dict.get('querysort', 'date')
   date = request.query_dict.get('date', 'hours')
   hours = request.query_dict.get('hours', '2')
@@ -3665,7 +3664,7 @@ def view_query(request):
   if not match_types.has_key(branch_match): branch_match = 'exact'
   if not match_types.has_key(file_match): file_match = 'exact'
   if not match_types.has_key(who_match): who_match = 'exact'
-  if not match_types.has_key(comment_match): comment_match = 'exact'
+  if not match_types.has_key(comment_match): comment_match = 'fulltext'
   if not sort_types.has_key(querysort): querysort = 'date'
   if not date_types.has_key(date): date = 'hours'
   mindate = parse_date(mindate)
@@ -3705,7 +3704,10 @@ def view_query(request):
   if who:
     query.SetAuthor(who, who_match)
   if comment:
-    query.SetComment(comment, comment_match)
+    if comment_match != 'fulltext':
+      query.SetComment(comment, comment_match)
+    else:
+      query.SetTextQuery(comment)
   query.SetSortMethod(querysort)
   if date == 'hours':
     query.SetFromDateHoursAgo(int(hours))
@@ -3882,33 +3884,6 @@ def list_roots(request):
     allroots[root] = [cfg.general.cvs_roots[root], 'cvs']
     
   return allroots
-
-def expand_root_parents(cfg):
-  """Expand the configured root parents into individual roots."""
-  
-  # Each item in root_parents is a "directory : repo_type" string.
-  for pp in cfg.general.root_parents:
-    pos = string.rfind(pp, ':')
-    if pos < 0:
-      raise debug.ViewVCException(
-        "The path '%s' in 'root_parents' does not include a "
-        "repository type." % (pp))
-
-    repo_type = string.strip(pp[pos+1:])
-    pp = os.path.normpath(string.strip(pp[:pos]))
-
-    if repo_type == 'cvs':
-      roots = vclib.ccvs.expand_root_parent(pp)
-      if cfg.options.hide_cvsroot and roots.has_key('CVSROOT'):
-        del roots['CVSROOT']
-      cfg.general.cvs_roots.update(roots)
-    elif repo_type == 'svn':
-      roots = vclib.svn.expand_root_parent(pp)
-      cfg.general.svn_roots.update(roots)
-    else:
-      raise debug.ViewVCException(
-        "The path '%s' in 'root_parents' has an unrecognized "
-        "repository type." % (pp))
 
 def find_root_in_parents(cfg, rootname, roottype):
   """Return the rootpath for configured ROOTNAME of ROOTTYPE."""

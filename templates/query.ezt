@@ -59,13 +59,24 @@
 
       <table>
        <tr>
-        <td align="right">CVS Repository:</td>
+        <td align="right">Search full-text:</td>
         <td>
-         <input type="text" name="repository" size="40" value="[repository]" />
+         <input type="text" name="textquery" size="40" value="[textquery]" />
         </td>
        </tr>
        <tr>
-        <td align="right">CVS Branch:</td>
+        <td align="right">Repository:</td>
+        <td>
+         <select name="repository" style="width: 270pt">
+          <option value="">- any -</option>
+         [for repositories]
+          <option value="[repositories]"[is repositories repository] selected="selected"[end]>[repositories]</option>
+         [end]
+         </select>
+        </td>
+       </tr>
+       <tr>
+        <td align="right">Branch:</td>
         <td>
          <input type="text" name="branch" size="40" value="[branch]" />
         </td>
@@ -98,6 +109,7 @@
         <td align="left">Sort By:</td>
         <td>
          <select name="sortby">
+          <option value="relevance" [is sortby "relevance"]selected="selected"[end]>Relevance & Date</option>
           <option value="date" [is sortby "date"]selected="selected"[end]>Date</option>
           <option value="author" [is sortby "author"]selected="selected"[end]>Author</option>
           <option value="file" [is sortby "file"]selected="selected"[end]>File</option>
