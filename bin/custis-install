@@ -30,13 +30,17 @@ fi
 export CVSROOT
 export http_proxy
 
-DEPS="python python-setuptools libapache2-mod-python rcs diff cvsnt subversion subversion-tools python-subversion python-mysqldb cvsgraph"
+DEPS="python libapache2-mod-python rcs diff cvsnt subversion subversion-tools python-subversion python-mysqldb cvsgraph"
 
 echo "*** Installing dependency packages: $DEPS"
 apt-get install $DEPS
 
 echo "*** Installing Pygments for Python"
-easy_install Pygments
+wget http://pypi.python.org/packages/source/P/Pygments/Pygments-0.11.1.tar.gz
+tar -zxf Pygments-0.11.1.tar.gz
+cd Pygments-0.11.1
+python setup.py install
+cd ..
 
 echo "*** Installing ViewVC into $VIEWVC_DIR"
 ../viewvc-install <<EOF
