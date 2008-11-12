@@ -1332,8 +1332,7 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
   try:
     from pygments import highlight
     from pygments.formatters import HtmlFormatter
-    from pygments.lexers import ClassNotFound, \
-                                get_lexer_by_name, \
+    from pygments.lexers import get_lexer_by_name, \
                                 get_lexer_for_mimetype, \
                                 get_lexer_for_filename
     try:
@@ -1387,9 +1386,17 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
         self.blame_data.append(item)
       self.line_no = self.line_no + 1
   ps = PygmentsSink(blame_source)
-  highlight(fp.read(), lexer,
+  fpd = fp.read()
+  try:
+    fpdat = unicode(fpd,'utf-8')
+  except:
+    try:
+      fpdat = unicode(fpd,'cp1251')
+    except:
+      fpdat = fpd
+  highlight(fpdat, lexer,
             HtmlFormatter(nowrap=True,
-                          classprefix="pygments-",
+                          classprefix='pygments-',
                           encoding='utf-8'), ps)
   return ps.blame_data
 
