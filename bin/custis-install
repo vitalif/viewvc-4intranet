@@ -1,10 +1,10 @@
 #!/bin/sh
 # ViewVC installation script for CustIS
 
-if [ -f custis-install-config ] then;
+if [ -f custis-install-config ]; then
     . custis-install-config
 else
-    echo <<EOF
+    cat <<EOF
 Please create 'custis-install-config' file with the following contents:
 
 CVSROOT=
@@ -18,8 +18,7 @@ DB_USER=
 DB_PASSWD=
 
 VIEWVC_DIR=
-APACHE_CONFIG=
-    EOF
+EOF
     exit
 fi
 
