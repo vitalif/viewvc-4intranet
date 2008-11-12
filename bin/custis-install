@@ -118,9 +118,9 @@ host = $DB_HOST
 socket = $DB_SOCKET
 database_name = $DB
 user = $DB_USER
-passwd = $DB_PASSWORD
+passwd = $DB_PASSWD
 readonly_user = $DB_USER
-readonly_passwd = $DB_PASSWORD
+readonly_passwd = $DB_PASSWD
 
 [vhosts]
 
