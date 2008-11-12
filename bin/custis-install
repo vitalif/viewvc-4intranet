@@ -213,6 +213,7 @@ EOF
     cat >/etc/cron.d/viewvc-cvs-$CVS_CRONJOB <<EOF
 */5 * * * * $VIEWVC_DIR/cvshook
 EOF
+    /etc/init.d/cron reload
 fi
 
 echo "*** Setting up commit hooks for Subversion"
