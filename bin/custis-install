@@ -1,0 +1,155 @@
+#!/bin/sh
+# ViewVC installation script for CustIS
+
+# CONFIGURATION ################################################################
+
+CVSROOT=
+SVNROOT=
+
+DB_HOST=
+DB_PORT=
+DB_SOCKET=/var/run/mysqld/mysqld.sock
+DB=
+DB_USER=
+DB_PASSWD=
+
+VIEWVC_DIR=
+APACHE_CONFIG=
+
+################################################################################
+
+export CVSROOT
+
+DEPS="python python-setuptools libapache2-mod-python rcs diff cvsnt subversion subversion-tools python-subversion python-mysqldb cvsgraph"
+
+echo "*** Installing dependency packages: $DEPS"
+apt-get install $DEPS
+
+echo "*** Installing Pygments for Python"
+easy_install Pygments
+
+echo "*** Installing ViewVC into $VIEWVC_DIR"
+../viewvc-install <<EOF
+$VIEWVC_DIR
+
+EOF
+
+echo "*** Writing ViewVC configuration into $VIEWVC_DIR/viewvc.conf"
+cat >"$VIEWVC_DIR/viewvc.conf" <<EOF
+[general]
+cvs_roots = cvs: $CVSROOT
+root_parents = $SVNROOT : svn
+cvsnt_exe_path = /usr/bin/cvsnt
+mime_types_file = /etc/mime.types
+address = Admin address: stas [gav-gav] custis [ru]
+kv_files =
+languages = en-us, ru-ru
+
+[utilities]
+rcs_dir = /usr/bin
+cvsnt = /usr/bin/cvsnt
+svn = /usr/bin/svn
+diff = /usr/bin/diff
+cvsgraph = /usr/bin/cvsgraph
+
+[options]
+allowed_views = markup, annotate, roots
+authorizer = forbidden
+checkout_magic = 0
+cross_copies = 1
+cvsgraph_conf = $VIEWVC_DIR/cvsgraph.conf
+default_file_view = log
+diff_format = h
+docroot = /viewvc-static
+enable_syntax_coloration = 1
+generate_etags = 1
+hide_attic = 1
+hide_cvsroot = 1
+hide_errorful_entries = 0
+hr_breakable = 1
+hr_funout = 0
+hr_ignore_keyword_subst = 1
+hr_ignore_white = 1
+hr_intraline = 0
+http_expiration_time = 600
+limit_changes = 100
+log_sort = date
+mangle_email_addresses = 1
+root_as_url_component = 1
+short_log_len = 80
+show_log_in_markup = 1
+show_logs = 1
+show_subdir_lastmod = 0
+sort_by = file
+sort_group_dirs = 1
+svn_config_dir =
+template_dir = templates
+use_cvsgraph = 1
+use_localtime = 1
+use_pagesize = 20
+use_rcsparse = 0
+use_re_search = 0
+
+[templates]
+
+[cvsdb]
+enabled = 1
+host = $DB_HOST
+socket = $DB_SOCKET
+database_name = $DB
+user = $DB_USER
+passwd = $DB_PASSWORD
+readonly_user = $DB_USER
+readonly_passwd = $DB_PASSWORD
+
+[vhosts]
+
+[authz-forbidden]
+forbidden =
+
+[authz-forbiddenre]
+forbiddenre =
+
+[authz-svnauthz]
+authzfile =
+EOF
+
+echo "*** Initializing database: $DB using $DB_USER@$DB_HOST"
+$VIEWVC_DIR/bin/make-database <<EOF
+$DB_HOST
+$DB_USER
+$DB_PASSWD
+$DB
+EOF
+
+echo "*** Configuring Apache"
+[ -f /etc/apache2/mods-available/mod_python.load ] && \
+    ln -fs ../mods-available/mod_python.load /etc/apache2/mods-enabled/python.load
+[ -f /etc/apache2/mods-available/python.load ] && \
+    ln -fs ../mods-available/python.load /etc/apache2/mods-enabled/python.load
+mv /etc/apache2/sites-available/default /etc/apache2/sites-available/default.bak
+grep -v '^\s*</VirtualHost>\s*$' /etc/apache2/sites-available/default.bak > /etc/apache2/sites-available/default
+cat >>/etc/apache2/sites-available/default <<EOF
+
+    # ViewVC at $VIEWVC_DIR
+    Alias /viewvc $VIEWVC_DIR/bin/mod_python
+    Alias /viewvc-static $VIEWVC_DIR/templates/docroot
+    <Location ~ ^/*viewvc/*$>
+        Options -Indexes
+        RewriteEngine On
+        RewriteRule /viewvc/viewvc.py [R,L]
+    </Location>
+    <Directory $VIEWVC_DIR/bin/mod_python>
+        AddHandler python-program .py
+        PythonHandler handler
+        PythonDebug Off
+    </Directory>
+
+</VirtualHost>
+EOF
+
+echo "*** Building commit database for CVS"
+$VIEWVC_DIR/bin/cvsdbadmin rebuild $CVSROOT
+
+echo "*** Building commit database for Subversion repositories"
+ls $SVNROOT | xargs -I IIIII $VIEWVC_DIR/bin/svndbadmin -v rebuild $SVNROOT/IIIII
