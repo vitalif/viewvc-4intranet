@@ -7,6 +7,8 @@ else
     cat <<EOF
 Please create 'custis-install-config' file with the following contents:
 
+CVS_CRONJOB=
+CVS_USER=www-data
 CVSROOT=
 SVNROOT=
 
@@ -169,9 +171,43 @@ $VIEWVC_DIR/bin/cvsdbadmin rebuild $CVSROOT
 echo "*** Building commit database for Subversion repositories"
 ls $SVNROOT | xargs -I IIIII $VIEWVC_DIR/bin/svndbadmin -v rebuild $SVNROOT/IIIII
 
+echo "*** Setting up commit hook for CVS (job=$CVS_CRONJOB)"
+if [ "$CVS_CRONJOB" ]; then
+    VHOOK="touch $VIEWVC_DIR/.cvs-updated"
+else
+    VHOOK="$VIEWVC_DIR/bin/cvsdbadmin update $CVSROOT >/dev/null"
+fi;
+su $CVS_USER -s /bin/sh <<EOSH
+CVSROOT=$CVSROOT cvs co CVSROOT
+cd CVSROOT
+mv loginfo loginfo.bak
+grep -v '/.cvs-updated' <loginfo.bak | grep -v '/bin/cvsdbadmin update' >loginfo
+cat >>loginfo <<EOF
+* $VHOOK
+EOF
+chmod 755 loginfo
+cvs ci -m 'CVS commit hook for ViewVC' loginfo
+EOSH
+if [ "$CVS_CRONJOB" ]; then
+    cat >$VIEWVC_DIR/cvshook <<EOF
+#!/bin/sh
+if [ -e "$VIEWVC_DIR/.cvs-updated" ]; then
+    rm "$VIEWVC_DIR/.cvs-updated"
+    $VIEWVC_DIR/bin/cvsdbadmin update $CVSROOT >/dev/null
+fi
+EOF
+    chmod 755 $VIEWVC_DIR/cvshook
+    cat >/etc/cron.d/viewvc-cvs-$CVS_CRONJOB <<EOF
+*/5 * * * * $VIEWVC_DIR/cvshook
+EOF
+fi
+
 echo "*** Setting up commit hooks for Subversion"
-
-
-echo "*** Setting up commit hooks for CVS"
-
-
+for i in `ls $SVNROOT`; do
+    cat >"$SVNROOT/$i/hooks/post-commit.0" <<EOF
+#!/bin/sh
+$VIEWVC_DIR/bin/svndbadmin update \$1 \$2
+EOF
+    chmod 755 "$SVNROOT/$i/hooks/post-commit.0"
+    mv "$SVNROOT/$i/hooks/post-commit.0" "$SVNROOT/$i/hooks/post-commit"
+done
