@@ -239,6 +239,25 @@ class CheckinDatabase:
     def GetAuthorList(self):
         return self.get_list("people", 1)
 
+    def GetLatestCheckinTime(self, repository):
+        repository_id = self.GetRepositoryID(repository.rootpath, 0)
+        if repository_id is None:
+            return None
+        
+        sql = "SELECT ci_when FROM checkins WHERE "\
+              "repositoryid = %s ORDER BY ci_when DESC LIMIT 1"
+        sql_args = (repository_id)
+        
+        cursor = self.db.cursor()
+        cursor.execute(sql, sql_args)
+        ci_when = None
+        try:
+            ci_when = cursor.fetchone()[0]
+        except TypeError:
+            return None
+        
+        return dbi.TicksFromDateTime(ci_when)
+
     def AddCommitList(self, commit_list):
         for commit in commit_list:
             self.AddCommit(commit)
