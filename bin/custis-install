@@ -150,7 +150,7 @@ echo "*** Configuring Apache"
 [ -f /etc/apache2/mods-available/rewrite.load ] && \
     ln -fs ../mods-available/rewrite.load /etc/apache2/mods-enabled/rewrite.load
 mv /etc/apache2/sites-available/default /etc/apache2/sites-available/default.bak
-grep -v '^\s*</VirtualHost>\s*$' /etc/apache2/sites-available/default.bak | grep -v '^\s*Include\s*viewvc.conf\s*$' > /etc/apache2/sites-available/default
+grep -v '^\s*</VirtualHost>\s*$' /etc/apache2/sites-available/default.bak | grep -v '^\s*Include\s*/etc/apache2/sites-available/viewvc.conf\s*$' > /etc/apache2/sites-available/default
 cat >>/etc/apache2/sites-available/default <<EOF
     Include /etc/apache2/sites-available/viewvc.conf
 </VirtualHost>
