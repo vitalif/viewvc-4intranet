@@ -53,6 +53,13 @@ class CheckinDatabase:
         cursor.execute("SET AUTOCOMMIT=1")
 
     def sql_get_id(self, table, column, value, auto_set):
+        try: column = unicode(column, "utf-8")
+        except:
+            try: column = unicode(column, "cp1251")
+            except:
+                try: column = unicode(column, "iso-8859-1")
+                except: column = column
+
         sql = "SELECT id FROM %s WHERE %s=%%s" % (table, column)
         sql_args = (value, )
         
@@ -65,7 +72,7 @@ class CheckinDatabase:
                 return None
         else:
             return str(int(id))
-   
+
         ## insert the new identifier
         sql = "INSERT INTO %s(%s) VALUES(%%s)" % (table, column)
         sql_args = (value, )
