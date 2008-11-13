@@ -30,7 +30,7 @@ fi
 export CVSROOT
 export http_proxy
 
-DEPS="python libapache2-mod-python rcs diff cvsnt subversion subversion-tools python-subversion python-mysqldb cvsgraph"
+DEPS="python libapache2-mod-python rcs diff cvsnt subversion subversion-tools python-setuptools python-subversion python-mysqldb cvsgraph"
 
 echo "*** Installing dependency packages: $DEPS"
 apt-get install $DEPS
@@ -180,7 +180,11 @@ echo "*** Building commit database for CVS"
 $VIEWVC_DIR/bin/cvsdbadmin rebuild $CVSROOT
 
 echo "*** Building commit database for Subversion repositories"
-ls $SVNROOT | xargs -I IIIII $VIEWVC_DIR/bin/svndbadmin -v rebuild $SVNROOT/IIIII
+for i in `ls $SVNROOT`; do
+    if [ -d "$SVNROOT/$i" ]; then
+        $VIEWVC_DIR/bin/svndbadmin -v rebuild "$SVNROOT/$i"
+    fi
+done
 
 echo "*** Setting up commit hook for CVS (job=$CVS_CRONJOB)"
 if [ "$CVS_CRONJOB" ]; then
@@ -218,10 +222,12 @@ fi
 
 echo "*** Setting up commit hooks for Subversion"
 for i in `ls $SVNROOT`; do
-    cat >"$SVNROOT/$i/hooks/post-commit.0" <<EOF
+    if [ -d "$SVNROOT/$i" ]; then
+        cat >"$SVNROOT/$i/hooks/post-commit.0" <<EOF
 #!/bin/sh
 $VIEWVC_DIR/bin/svndbadmin update \$1 \$2
 EOF
-    chmod 755 "$SVNROOT/$i/hooks/post-commit.0"
-    mv "$SVNROOT/$i/hooks/post-commit.0" "$SVNROOT/$i/hooks/post-commit"
+        chmod 755 "$SVNROOT/$i/hooks/post-commit.0"
+        mv "$SVNROOT/$i/hooks/post-commit.0" "$SVNROOT/$i/hooks/post-commit"
+    fi
 done
