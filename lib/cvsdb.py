@@ -52,17 +52,22 @@ class CheckinDatabase:
         cursor = self.db.cursor()
         cursor.execute("SET AUTOCOMMIT=1")
 
-    def sql_get_id(self, table, column, value, auto_set):
-        try: column = unicode(column, "utf-8")
+    def utf8string(self, value):
+        try: value = value.decode("utf-8")
         except:
-            try: column = unicode(column, "cp1251")
+            try: value = value.decode("cp1251")
             except:
-                try: column = unicode(column, "iso-8859-1")
-                except: column = column
+                try: value = value.decode("iso-8859-1")
+                except: 1
+        value = value.encode("utf-8")
+        return value
+
+    def sql_get_id(self, table, column, value, auto_set):
+        value = self.utf8string(value)
 
         sql = "SELECT id FROM %s WHERE %s=%%s" % (table, column)
         sql_args = (value, )
-        
+
         cursor = self.db.cursor()
         cursor.execute(sql, sql_args)
         try:
@@ -191,12 +196,13 @@ class CheckinDatabase:
         return self.get_list("repositories", repository)
 
     def SQLGetDescriptionID(self, description, auto_set = 1):
+        description = self.utf8string(description)
         ## lame string hash, blame Netscape -JMP
         hash = len(description)
 
         sql = "SELECT id FROM descs WHERE hash=%s AND description=%s"
         sql_args = (hash, description)
-        
+
         cursor = self.db.cursor()
         cursor.execute(sql, sql_args)
         try:
@@ -210,7 +216,7 @@ class CheckinDatabase:
         sql = "INSERT INTO descs (hash,description) values (%s,%s)"
         sql_args = (hash, description)
         cursor.execute(sql, sql_args)
-        
+
         return self.GetDescriptionID(description, 0)
 
     def GetDescriptionID(self, description, auto_set = 1):
@@ -501,12 +507,12 @@ class CheckinDatabase:
           sql_args = (value, value)
         cursor = self.db.cursor()
         cursor.execute(sql, sql_args)
-        
+
     def PurgeRepository(self, repository):
         rep_id = self.GetRepositoryID(repository)
         if not rep_id:
             raise Exception, "Unknown repository '%s'" % (repository)
-        
+
         sql = "SELECT * FROM checkins WHERE repositoryid=%s"
         sql_args = (rep_id, )
         cursor = self.db.cursor()

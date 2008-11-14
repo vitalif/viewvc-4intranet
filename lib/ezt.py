@@ -790,8 +790,10 @@ class UnknownFormatConstantError(EZTException):
   """The format specifier is an unknown value."""
 
 def _raw_printer(ctx, s):
+  try: s = s.encode('utf-8')
+  except: 1
   ctx.fp.write(s)
-  
+
 def _html_printer(ctx, s):
   ctx.fp.write(cgi.escape(s))
 
