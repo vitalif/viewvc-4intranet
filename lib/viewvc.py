@@ -710,6 +710,9 @@ _legal_params = {
   'rev'           : _re_validate_revnum,
   'tarball'       : _re_validate_number,
   'hidecvsroot'   : _re_validate_number,
+  
+  # Vitaphoto global auth
+  'grant_global_auth' : _re_validate_number,
   }
 
 def _path_join(path_parts):
@@ -1332,7 +1335,8 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
   try:
     from pygments import highlight
     from pygments.formatters import HtmlFormatter
-    from pygments.lexers import get_lexer_by_name, \
+    from pygments.lexers import ClassNotFound, \
+                                get_lexer_by_name, \
                                 get_lexer_for_mimetype, \
                                 get_lexer_for_filename
     try:
