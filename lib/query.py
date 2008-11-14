@@ -304,7 +304,7 @@ def is_forbidden(cfg, cvsroot_name, module):
     return default
     
 def build_commit(server, cfg, desc, files, cvsroots, viewvc_link):
-    ob = _item(num_files=len(files), files=[])
+    ob = _item(num_files=len(files), files=[], plus=0, minus=0)
     
     if desc:
         ob.log = string.replace(server.escape(desc), '\n', '<br />')
@@ -360,6 +360,8 @@ def build_commit(server, cfg, desc, files, cvsroots, viewvc_link):
             dlink = None
 
         ob.relevance = commit.GetRelevance()
+        ob.plus += int(commit.GetPlusCount())
+        ob.minus += int(commit.GetMinusCount())
         ob.files.append(_item(date=ctime,
                               author=commit.GetAuthor(),
                               link=flink,

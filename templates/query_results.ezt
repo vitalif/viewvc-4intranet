@@ -10,7 +10,7 @@
 <p><a href="[queryform_href]">Modify query</a></p>
 <p><a href="[backout_href]">Show commands which could be used to back out these changes</a></p>
 
-<p><strong>+[plus_count]/-[minus_count]</strong> lines changed.</p>
+<p><strong>+[plus_count]/-[minus_count]</strong> changed lines total.</p>
 
 [if-any commits]
 <table cellspacing="1" cellpadding="2">
@@ -75,8 +75,9 @@
   [end]
   <tr class="vc_row_[if-index commits even]even[else]odd[end]">
     <td>&nbsp;</td>
-    <td colspan="5"><strong>Log:</strong><br />
+    <td colspan="1"><strong>Log:</strong><br />
       <pre class="vc_log">[commits.log]</pre></td>
+    <td colspan="4">[commits.plus]/[commits.minus]</td>
   </tr>
   </tbody>
 [end]
