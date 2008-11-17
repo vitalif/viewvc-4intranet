@@ -4,13 +4,12 @@
 if [ -f custis-install-config ]; then
     . custis-install-config
 else
-    cat <<EOF
-Please create 'custis-install-config' file with the following contents:
-
+    cat >custis-install-config <<EOF
 CVS_CRONJOB=
 CVS_USER=www-data
 CVSROOT=
 SVNROOT=
+SVNEXCLUDE=
 
 DB_HOST=
 DB_PORT=
@@ -22,6 +21,12 @@ DB_PASSWD=
 VIEWVC_DIR=
 http_proxy=
 EOF
+    echo Empty 'custis-install-config' initialized, please edit it before installation.
+    exit
+fi
+
+if [ ! "$DB" -o ! "$VIEWVC_DIR" ]; then
+    echo Please set up 'custis-install-config' before installation.
     exit
 fi
 
@@ -74,7 +79,7 @@ cvsgraph = /usr/bin/cvsgraph
 
 [options]
 allowed_views = markup, annotate, roots
-authorizer = forbidden
+authorizer = forbiddenre
 checkout_magic = 0
 cross_copies = 1
 cvsgraph_conf = $VIEWVC_DIR/cvsgraph.conf
@@ -128,7 +133,7 @@ readonly_passwd = $DB_PASSWD
 forbidden =
 
 [authz-forbiddenre]
-forbiddenre =
+forbiddenre = ^gpb(/|$)
 
 [authz-svnauthz]
 authzfile =
