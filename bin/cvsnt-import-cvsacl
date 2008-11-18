@@ -12,30 +12,30 @@ while(<>)
     next if $perm eq 'p';
     if ($perm eq 't')
     {
-	$perm = 'read,tag,nowrite,nocreate,nocontrol';
+        $perm = 'read,tag,nowrite,nocreate,nocontrol';
     }
     elsif ($perm eq 'r')
     {
-	$perm = 'read,notag,nowrite,nocreate,nocontrol';
+        $perm = 'read,notag,nowrite,nocreate,nocontrol';
     }
     elsif ($perm eq 'w')
     {
-	$perm = 'read,tag,write,nocreate,nocontrol';
+        $perm = 'read,tag,write,nocreate,nocontrol';
     }
     elsif ($perm eq 'c' || $perm eq 'a')
     {
-	$perm = 'read,tag,write,create,nocontrol';
+        $perm = 'read,tag,write,create,nocontrol';
     }
     print "cvs rchacl -R -a $perm";
     print " -u '$user'" if $user ne 'ALL';
     print " -r '$branch'" if $branch ne 'ALL';
     if ($path ne 'ALL')
     {
-	print " '$path'";
+        print " '$path'";
     }
     else
     {
-	print ' `ls $CVSROOT | grep -v '."'#cvs'`";
+        print ' `ls $CVSROOT | grep -v '."'#cvs'`";
     }
     print "\n";
 }
