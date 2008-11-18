@@ -1,0 +1,41 @@
+#!/usr/bin/perl
+
+use strict;
+my ($type, $path, $branch, $user, $perm);
+
+while(<>)
+{
+    chomp;
+    next if /^\s*#/so;
+    ($type, $path, $branch, $user, $perm) = split /:/, $_;
+    ($user, $perm) = split /!/, $user;
+    next if $perm eq 'p';
+    if ($perm eq 't')
+    {
+	$perm = 'read,tag,nowrite,nocreate,nocontrol';
+    }
+    elsif ($perm eq 'r')
+    {
+	$perm = 'read,notag,nowrite,nocreate,nocontrol';
+    }
+    elsif ($perm eq 'w')
+    {
+	$perm = 'read,tag,write,nocreate,nocontrol';
+    }
+    elsif ($perm eq 'c' || $perm eq 'a')
+    {
+	$perm = 'read,tag,write,create,nocontrol';
+    }
+    print "cvs rchacl -R -a $perm";
+    print " -u '$user'" if $user ne 'ALL';
+    print " -r '$branch'" if $branch ne 'ALL';
+    if ($path ne 'ALL')
+    {
+	print " '$path'";
+    }
+    else
+    {
+	print ' `ls $CVSROOT | grep -v '."'#cvs'`";
+    }
+    print "\n";
+}
