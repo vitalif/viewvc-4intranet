@@ -422,7 +422,7 @@ def main(server, cfg, viewvc_link):
     form = server.FieldStorage()
     form_data = FormData(form)
 
-    db = cvsdb.ConnectDatabaseReadOnly(cfg)
+    db = cvsdb.ConnectDatabaseReadOnly(cfg, None)
     if form_data.valid:
         commits = run_query(server, cfg, db, form_data, viewvc_link)
         query = None
