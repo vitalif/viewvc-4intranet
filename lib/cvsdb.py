@@ -30,7 +30,7 @@ error = "cvsdb error"
 ## complient database interface
 
 class CheckinDatabase:
-    def __init__(self, host, port, socket, user, passwd, database, row_limit, min_relevance):
+    def __init__(self, host, port, socket, user, passwd, database, row_limit, min_relevance, authorizer = None):
         self._host = host
         self._port = port
         self._socket = socket
@@ -39,7 +39,7 @@ class CheckinDatabase:
         self._database = database
         self._row_limit = row_limit
         self._min_relevance = min_relevance
-        self.text_query = ""
+        self.authorizer = authorizer
 
         ## database lookup caches
         self._get_cache = {}
@@ -341,8 +341,16 @@ class CheckinDatabase:
         return "(%s)" % (string.join(sqlList, " OR "))
 
     def CreateSQLQueryString(self, query):
-        fields = ["checkins.*"]
-        tableList = [("checkins", None)]
+        fields = [
+            "checkins.*",
+            "repositories.repository AS repository_name",
+            "dirs.dir AS dir_name",
+            "files.file AS file_name"]
+        tableList = [
+            ("checkins", None),
+            ("repositories","(checkins.repositoryid=repositories.id)"),
+            ("dirs", "(checkins.dirid=dirs.id)"),
+            ("files", "(checkins.fileid=files.id)")]
         condList = []
         
         if len(query.text_query):
@@ -354,8 +362,6 @@ class CheckinDatabase:
             fields.append("'' AS relevance")
 
         if len(query.repository_list):
-            tableList.append(("repositories",
-                              "(checkins.repositoryid=repositories.id)"))
             temp = self.SQLQueryListString("repositories.repository",
                                            query.repository_list)
             condList.append(temp)
@@ -367,7 +373,6 @@ class CheckinDatabase:
             condList.append(temp)
 
         if len(query.directory_list):
-            tableList.append(("dirs", "(checkins.dirid=dirs.id)"))
             temp = self.SQLQueryListString("dirs.dir", query.directory_list)
             condList.append(temp)
             
@@ -434,6 +439,15 @@ class CheckinDatabase:
             fields, tables, conditions, order_by, limit)
 
         return sql
+    
+    def check_commit_access(self, repos, dir, file, rev):
+        if self.authorizer:
+            rootname = repos.split('/')
+            rootname = rootname.pop()
+            path_parts = dir.split('/')
+            path_parts.append(file)
+            return self.authorizer.check_path_access(rootname, path_parts, vclib.FILE, rev)
+        return True
 
     def RunQuery(self, query):
         sql = self.CreateSQLQueryString(query)
@@ -447,7 +461,11 @@ class CheckinDatabase:
 
             (dbType, dbCI_When, dbAuthorID, dbRepositoryID, dbDirID,
              dbFileID, dbRevision, dbStickyTag, dbBranchID, dbAddedLines,
-             dbRemovedLines, dbDescID, dbRelevance) = row
+             dbRemovedLines, dbDescID, dbRepositoryName, dbDirName,
+             dbFileName, dbRelevance) = row
+
+            if not self.check_commit_access(dbRepositoryName, dbDirName, dbFileName, dbRevision):
+                continue
 
             commit = LazyCommit(self)
             if dbType == 'Add':
@@ -456,6 +474,7 @@ class CheckinDatabase:
                 commit.SetTypeRemove()
             else:
                 commit.SetTypeChange()
+
             commit.SetTime(dbi.TicksFromDateTime(dbCI_When))
             commit.SetFileID(dbFileID)
             commit.SetDirectoryID(dbDirID)
@@ -806,7 +825,7 @@ def CreateCommit():
 def CreateCheckinQuery():
     return CheckinDatabaseQuery()
 
-def ConnectDatabase(cfg, readonly=0):
+def ConnectDatabase(cfg, authorizer=None, readonly=0):
     if readonly:
         user = cfg.cvsdb.readonly_user
         passwd = cfg.cvsdb.readonly_passwd
@@ -814,12 +833,13 @@ def ConnectDatabase(cfg, readonly=0):
         user = cfg.cvsdb.user
         passwd = cfg.cvsdb.passwd
     db = CheckinDatabase(cfg.cvsdb.host, cfg.cvsdb.port, cfg.cvsdb.socket, user, passwd,
-                         cfg.cvsdb.database_name, cfg.cvsdb.row_limit, cfg.cvsdb.fulltext_min_relevance)
+                         cfg.cvsdb.database_name, cfg.cvsdb.row_limit, cfg.cvsdb.fulltext_min_relevance,
+                         authorizer)
     db.Connect()
     return db
 
-def ConnectDatabaseReadOnly(cfg):
-    return ConnectDatabase(cfg, 1)
+def ConnectDatabaseReadOnly(cfg, authorizer):
+    return ConnectDatabase(cfg, authorizer, 1)
 
 def GetCommitListFromRCSFile(repository, path_parts, revision=None):
     commit_list = []

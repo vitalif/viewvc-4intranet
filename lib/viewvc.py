@@ -3312,7 +3312,7 @@ def is_querydb_nonempty_for_root(request):
     if request.cfg.cvsdb.check_database_for_root:
       global cvsdb
       import cvsdb
-      db = cvsdb.ConnectDatabaseReadOnly(request.cfg)
+      db = cvsdb.ConnectDatabaseReadOnly(request.cfg, request.auth)
       repos_root, repos_dir = cvsdb.FindRepository(db, request.rootpath)
       if repos_root:
         return 1
@@ -3684,7 +3684,7 @@ def view_query(request):
   global cvsdb
   import cvsdb
 
-  db = cvsdb.ConnectDatabaseReadOnly(cfg)
+  db = cvsdb.ConnectDatabaseReadOnly(cfg, request.auth)
   repos_root, repos_dir = cvsdb.FindRepository(db, request.rootpath)
   if not repos_root:
     raise debug.ViewVCException(
