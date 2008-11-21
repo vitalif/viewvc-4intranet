@@ -3,13 +3,25 @@
 use strict;
 my ($type, $path, $branch, $user, $perm);
 
+my $R = ''; # -R for recursive
+my $lvl = {
+    r => 1,
+    t => 2,
+    w => 3,
+    c => 4,
+    a => 4,
+    p => 5,
+};
+
 while(<>)
 {
     chomp;
     next if /^\s*#/so;
     ($type, $path, $branch, $user, $perm) = split /:/, $_;
     ($user, $perm) = split /!/, $user;
-    next if $perm eq 'p';
+    next unless $perm;
+    $perm = [ sort { $lvl->{$b} cmp $lvl->{$a} } split //, $perm ];
+    $perm = $perm->[0];
     if ($perm eq 't')
     {
         $perm = 'read,tag,nowrite,nocreate,nocontrol';
@@ -26,7 +38,11 @@ while(<>)
     {
         $perm = 'read,tag,write,create,nocontrol';
     }
-    print "cvs rchacl -R -a $perm";
+    elsif ($perm eq 'p')
+    {
+        $perm = 'read,tag,write,create,control';
+    }
+    print "cvs rchacl$R -a $perm";
     print " -u '$user'" if $user ne 'ALL';
     print " -r '$branch'" if $branch ne 'ALL';
     if ($path ne 'ALL')
