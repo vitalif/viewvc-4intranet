@@ -1,0 +1,21 @@
+#!/bin/sh
+
+SVNROOT=$1
+VIEWVC_DIR=$2
+
+if [ ! "$SVNROOT" -o ! "$VIEWVC_DIR" ]; then
+    echo "USAGE: $0 <SVNROOT> <VIEWVC_DIR>"
+    exit
+fi
+
+echo "*** Setting up commit hooks for Subversion"
+for i in `ls $SVNROOT`; do
+    if [ -d "$SVNROOT/$i" ]; then
+        cat >"$SVNROOT/$i/hooks/post-commit.0" <<EOF
+#!/bin/sh
+$VIEWVC_DIR/bin/svndbadmin update \$1 \$2
+EOF
+        chmod 755 "$SVNROOT/$i/hooks/post-commit.0"
+        mv "$SVNROOT/$i/hooks/post-commit.0" "$SVNROOT/$i/hooks/post-commit"
+    fi
+done
