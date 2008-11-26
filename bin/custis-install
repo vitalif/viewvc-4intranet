@@ -7,9 +7,9 @@ else
     cat >custis-install-config <<EOF
 CVS_CRONJOB=
 CVS_USER=www-data
-CVSROOT=
+CVSROOTS=
 SVNROOT=
-SVNEXCLUDE=
+SVN_FORBIDDENRE=
 
 DB_HOST=
 DB_PORT=
@@ -20,6 +20,7 @@ DB_PASSWD=
 
 VIEWVC_DIR=
 http_proxy=
+no_proxy=
 EOF
     echo Empty 'custis-install-config' initialized, please edit it before installation.
     exit
@@ -32,8 +33,8 @@ fi
 
 ################################################################################
 
-export CVSROOT
 export http_proxy
+export no_proxy
 
 DEPS="python libapache2-mod-python rcs diff cvsnt subversion subversion-tools python-setuptools python-subversion python-mysqldb cvsgraph"
 
@@ -60,9 +61,16 @@ EOF
 fi
 
 echo "*** Writing ViewVC configuration into $VIEWVC_DIR/viewvc.conf"
+for CVSROOT in $CVSROOTS; do
+    if [ "$vccvsroots" ]; then
+	vccvsroots="$vccvsroots, "
+    fi
+    vcrootname=`basename $CVSROOT`
+    vccvsroots="$vccvsroots$vcrootname: $CVSROOT"
+done;
 cat >"$VIEWVC_DIR/viewvc.conf" <<EOF
 [general]
-cvs_roots = cvs: $CVSROOT
+cvs_roots = $vccvsroots
 root_parents = $SVNROOT : svn
 cvsnt_exe_path = /usr/bin/cvsnt
 mime_types_file = /etc/mime.types
@@ -133,7 +141,7 @@ readonly_passwd = $DB_PASSWD
 forbidden =
 
 [authz-forbiddenre]
-forbiddenre = ^gpb(/|$)
+forbiddenre = $SVN_FORBIDDENRE
 
 [authz-svnauthz]
 authzfile =
@@ -155,7 +163,7 @@ echo "*** Configuring Apache"
 [ -f /etc/apache2/mods-available/rewrite.load ] && \
     ln -fs ../mods-available/rewrite.load /etc/apache2/mods-enabled/rewrite.load
 mv /etc/apache2/sites-available/default /etc/apache2/sites-available/default.bak
-grep -v '^\s*</VirtualHost>\s*$' /etc/apache2/sites-available/default.bak | grep -v '^\s*Include\s*/etc/apache2/sites-available/viewvc.conf\s*$' > /etc/apache2/sites-available/default
+grep -v '^[ \t]*</VirtualHost>[ \t]*$' /etc/apache2/sites-available/default.bak | grep -v '^[ \t]*Include[ \t]*/etc/apache2/sites-available/viewvc.conf[ \t]*$' > /etc/apache2/sites-available/default
 cat >>/etc/apache2/sites-available/default <<EOF
     Include /etc/apache2/sites-available/viewvc.conf
 </VirtualHost>
@@ -182,57 +190,19 @@ sleep 1
 apache2ctl start
 
 echo "*** Building commit database for CVS"
-$VIEWVC_DIR/bin/cvsdbadmin rebuild $CVSROOT
+for CVSROOT in $CVSROOTS; do
+    $VIEWVC_DIR/bin/cvsdbadmin rebuild $CVSROOT
+done;
 
 echo "*** Building commit database for Subversion repositories"
 for i in `ls $SVNROOT`; do
     if [ -d "$SVNROOT/$i" ]; then
         $VIEWVC_DIR/bin/svndbadmin -v rebuild "$SVNROOT/$i"
     fi
-done
+done;
 
-echo "*** Setting up commit hook for CVS (job=$CVS_CRONJOB)"
-if [ "$CVS_CRONJOB" ]; then
-    VHOOK="touch $VIEWVC_DIR/.cvs-updated"
-else
-    VHOOK="$VIEWVC_DIR/bin/cvsdbadmin update $CVSROOT >/dev/null"
-fi;
-su $CVS_USER -s /bin/sh <<EOSH
-CVSROOT=$CVSROOT cvs co CVSROOT
-if [ ! $? ]; then
-cd CVSROOT
-mv loginfo loginfo.bak
-grep -v '/.cvs-updated' <loginfo.bak | grep -v '/bin/cvsdbadmin update' >loginfo
-cat >>loginfo <<EOF
-* $VHOOK
-EOF
-chmod 755 loginfo
-cvs ci -m 'CVS commit hook for ViewVC' loginfo
-fi
-EOSH
-if [ "$CVS_CRONJOB" ]; then
-    cat >$VIEWVC_DIR/cvshook <<EOF
-#!/bin/sh
-if [ -e "$VIEWVC_DIR/.cvs-updated" ]; then
-    rm "$VIEWVC_DIR/.cvs-updated"
-    $VIEWVC_DIR/bin/cvsdbadmin update $CVSROOT >/dev/null
-fi
-EOF
-    chmod 755 $VIEWVC_DIR/cvshook
-    cat >/etc/cron.d/viewvc-cvs-$CVS_CRONJOB <<EOF
-*/5 * * * * $VIEWVC_DIR/cvshook
-EOF
-    /etc/init.d/cron reload
-fi
+# setup hooks for CVS
+./setup-cvs-hooks "$CVSROOTS" "$VIEWVC_DIR" "$CVS_USER" "$CVS_CRONJOB"
 
-echo "*** Setting up commit hooks for Subversion"
-for i in `ls $SVNROOT`; do
-    if [ -d "$SVNROOT/$i" ]; then
-        cat >"$SVNROOT/$i/hooks/post-commit.0" <<EOF
-#!/bin/sh
-$VIEWVC_DIR/bin/svndbadmin update \$1 \$2
-EOF
-        chmod 755 "$SVNROOT/$i/hooks/post-commit.0"
-        mv "$SVNROOT/$i/hooks/post-commit.0" "$SVNROOT/$i/hooks/post-commit"
-    fi
-done
+# setup hooks for Subversion
+./setup-svn-hooks "$SVNROOT" "$VIEWVC_DIR"

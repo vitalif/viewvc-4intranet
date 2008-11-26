@@ -18,4 +18,4 @@ EOF
         chmod 755 "$SVNROOT/$i/hooks/post-commit.0"
         mv "$SVNROOT/$i/hooks/post-commit.0" "$SVNROOT/$i/hooks/post-commit"
     fi
-done
+done;

@@ -1,46 +1,51 @@
 #!/bin/sh
 
-CVSROOT=$1
+CVSROOTS=$1
 VIEWVC_DIR=$2
 CVS_USER=$3
 CVS_CRONJOB=$4
 
-if [ ! "$CVSROOT" -o ! "$VIEWVC_DIR" -o ! "$CVS_USER" ]; then
-    echo "USAGE: $0 <CVSROOT> <VIEWVC_DIR> <CVS_USER> [CVS_CRONJOB]"
+if [ ! "$CVSROOTS" -o ! "$VIEWVC_DIR" -o ! "$CVS_USER" ]; then
+    echo "USAGE: $0 <CVS_ROOTS> <VIEWVC_DIR> <CVS_USER> [CVS_CRONJOB]"
     exit
 fi
 
-echo "*** Setting up commit hook for CVS (job=$CVS_CRONJOB)"
+echo "*** Setting up commit hooks for CVS repositories (job=$CVS_CRONJOB)"
+for CVSROOT in $CVSROOTS; do
+vcrootname=`basename $CVSROOT`
 if [ "$CVS_CRONJOB" ]; then
-    VHOOK="touch $VIEWVC_DIR/.cvs-updated"
+    VHOOK="touch $VIEWVC_DIR/.cvs-updated-$vcrootname"
 else
     VHOOK="$VIEWVC_DIR/bin/cvsdbadmin update $CVSROOT >/dev/null"
 fi;
 su $CVS_USER -s /bin/sh <<EOSH
 CVSROOT=$CVSROOT cvs co CVSROOT
-if [ ! $? ]; then
+if [ $? -eq 0 ]; then
 cd CVSROOT
 mv loginfo loginfo.bak
 grep -v '/.cvs-updated' <loginfo.bak | grep -v '/bin/cvsdbadmin update' >loginfo
 cat >>loginfo <<EOF
-* $VHOOK
+ALL $VHOOK
 EOF
-chmod 755 loginfo
 cvs ci -m 'CVS commit hook for ViewVC' loginfo
 fi
 EOSH
 if [ "$CVS_CRONJOB" ]; then
-    cat >$VIEWVC_DIR/cvshook <<EOF
+    cat >$VIEWVC_DIR/cvshook-$vcrootname <<EOF
 #!/bin/sh
-if [ -e "$VIEWVC_DIR/.cvs-updated" ]; then
-    rm "$VIEWVC_DIR/.cvs-updated"
+if [ -e "$VIEWVC_DIR/.cvs-updated-$vcrootname" ]; then
+    rm "$VIEWVC_DIR/.cvs-updated-$vcrootname"
     $VIEWVC_DIR/bin/cvsdbadmin update $CVSROOT >/dev/null
 fi
 EOF
-    chmod 755 $VIEWVC_DIR/cvshook
-    cat >/etc/cron.d/viewvc-cvs-$CVS_CRONJOB <<EOF
-*/5 * * * * $VIEWVC_DIR/cvshook
+    chmod 755 $VIEWVC_DIR/cvshook-$vcrootname
+    cat >/etc/cron.d/viewvc-cvs-$vcrootname <<EOF
+*/5 * * * * $VIEWVC_DIR/cvshook-$vcrootname
 EOF
+fi
+done;
+
+if [ "$CVS_CRONJOB" ]; then
+    echo "*** Reloading cron daemon"
     /etc/init.d/cron reload
 fi
-
