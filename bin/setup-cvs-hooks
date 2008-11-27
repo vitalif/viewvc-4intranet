@@ -28,6 +28,8 @@ cat >>loginfo <<EOF
 ALL $VHOOK
 EOF
 cvs ci -m 'CVS commit hook for ViewVC' loginfo
+cd ..
+rm -Rf CVSROOT
 fi
 EOSH
 if [ "$CVS_CRONJOB" ]; then
