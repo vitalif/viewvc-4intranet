@@ -3493,6 +3493,8 @@ def build_commit(request, files, max_files, dir_strip, format):
 
     # Check path access (since the commits database logic bypasses the
     # vclib layer and, thus, the vcauth stuff that layer uses).
+    if request.roottype == 'cvs':
+      where = where.encode(cfg.options.ondisk_charset)
     path_parts = _path_parts(where)
     if path_parts:
       # Skip files in CVSROOT if asked to hide such.
