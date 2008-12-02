@@ -14,6 +14,7 @@ fi
 echo "*** Setting up commit hooks for CVS repositories (job=$CVS_CRONJOB)"
 chgrp $CVS_GROUP $VIEWVC_DIR
 chmod 775 $VIEWVC_DIR
+chmod 1777 .
 for CVSROOT in $CVSROOTS; do
 vcrootname=`basename $CVSROOT`
 if [ "$CVS_CRONJOB" ]; then
