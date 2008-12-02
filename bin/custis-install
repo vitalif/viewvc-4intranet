@@ -19,6 +19,8 @@ DB_USER=
 DB_PASSWD=
 
 VIEWVC_DIR=
+VIEWVC_URI=/
+VIEWVC_STATIC_URI=/static
 http_proxy=
 no_proxy=
 EOF
@@ -93,7 +95,7 @@ cross_copies = 1
 cvsgraph_conf = $VIEWVC_DIR/cvsgraph.conf
 default_file_view = log
 diff_format = h
-docroot = /viewvc-static
+docroot = $VIEWVC_STATIC_URI
 enable_syntax_coloration = 1
 generate_etags = 1
 hide_attic = 1
@@ -156,33 +158,34 @@ $DB
 EOF
 
 echo "*** Configuring Apache"
-[ -f /etc/apache2/mods-available/mod_python.load ] && \
-    ln -fs ../mods-available/mod_python.load /etc/apache2/mods-enabled/python.load
-[ -f /etc/apache2/mods-available/python.load ] && \
-    ln -fs ../mods-available/python.load /etc/apache2/mods-enabled/python.load
-[ -f /etc/apache2/mods-available/rewrite.load ] && \
-    ln -fs ../mods-available/rewrite.load /etc/apache2/mods-enabled/rewrite.load
-mv /etc/apache2/sites-available/default /etc/apache2/sites-available/default.bak
-grep -v '^[ \t]*</VirtualHost>[ \t]*$' /etc/apache2/sites-available/default.bak | grep -v '^[ \t]*Include[ \t]*/etc/apache2/sites-available/viewvc.conf[ \t]*$' > /etc/apache2/sites-available/default
-cat >>/etc/apache2/sites-available/default <<EOF
-    Include /etc/apache2/sites-available/viewvc.conf
-</VirtualHost>
-EOF
-cat >/etc/apache2/sites-available/viewvc.conf <<EOF
-    # ViewVC at $VIEWVC_DIR
-    Alias /viewvc $VIEWVC_DIR/bin/mod_python
-    Alias /viewvc-static $VIEWVC_DIR/templates/docroot
-    <Location ~ ^/*viewvc/*$>
+cat >/etc/apache2/sites-available/viewvc <<EOF
+<VirtualHost *:80>
+    ServerName viewvc.office.custis.ru
+    ServerAlias viewvc
+    ServerAdmin sysadmins@custis.ru
+    ServerSignature Off
+    ErrorLog /var/log/apache2/viewvc-error.log
+    TransferLog /var/log/apache2/viewvc-access.log
+    LogLevel warn
+    # ViewVC at $VIEWVC_URI installed at $VIEWVC_DIR
+    Alias $VIEWVC_URI $VIEWVC_DIR/bin/mod_python
+    Alias $VIEWVC_STATIC_URI $VIEWVC_DIR/templates/docroot
+    <Location ~ ^$VIEWVC_URI/*(\?.*)?$>
         Options -Indexes
         RewriteEngine On
-        RewriteRule /viewvc/viewvc.py [R,L]
+        RewriteRule /viewvc.py [R,L]
     </Location>
     <Directory $VIEWVC_DIR/bin/mod_python>
         AddHandler python-program .py
         PythonHandler handler
         PythonDebug Off
     </Directory>
+</VirtualHost>
 EOF
+a2enmod python
+a2enmod mod_python
+a2enmod rewrite
+a2ensite viewvc
 
 echo "*** Restarting Apache"
 apache2ctl stop
