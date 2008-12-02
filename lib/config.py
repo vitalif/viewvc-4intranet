@@ -278,7 +278,7 @@ class Config:
     self.options.use_re_search = 0
     self.options.use_pagesize = 0
     self.options.limit_changes = 100
-    self.options.ondisk_charset = 'cp1251'
+    self.options.cvs_ondisk_charset = 'cp1251'
 
     self.templates.diff = None
     self.templates.directory = None
