@@ -20,6 +20,7 @@ DB_PASSWD=
 
 VIEWVC_DIR=
 VIEWVC_URI=/
+VIEWVC_URI_SLASH=/
 VIEWVC_STATIC_URI=/static
 http_proxy=
 no_proxy=
@@ -168,14 +169,16 @@ cat >/etc/apache2/sites-available/viewvc <<EOF
     TransferLog /var/log/apache2/viewvc-access.log
     LogLevel warn
     # ViewVC at $VIEWVC_URI installed at $VIEWVC_DIR
-    Alias $VIEWVC_URI $VIEWVC_DIR/bin/mod_python
+    DocumentRoot $VIEWVC_DIR/bin/mod_python
     Alias $VIEWVC_STATIC_URI $VIEWVC_DIR/templates/docroot
-    <Location ~ ^$VIEWVC_URI/*(\?.*)?$>
+    Alias $VIEWVC_URI $VIEWVC_DIR/bin/mod_python/
+    <Location ~ ^${VIEWVC_URI_SLASH}*(\?.*)?$>
         Options -Indexes
         RewriteEngine On
-        RewriteRule /viewvc.py [R,L]
+        RewriteRule .* ${VIEWVC_URI_SLASH}viewvc.py%{REQUEST_URI} [R,L]
     </Location>
     <Directory $VIEWVC_DIR/bin/mod_python>
+        Options +ExecCGI
         AddHandler python-program .py
         PythonHandler handler
         PythonDebug Off
