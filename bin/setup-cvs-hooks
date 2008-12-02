@@ -3,14 +3,17 @@
 CVSROOTS=$1
 VIEWVC_DIR=$2
 CVS_USER=$3
-CVS_CRONJOB=$4
+CVS_GROUP=$4
+CVS_CRONJOB=$5
 
-if [ ! "$CVSROOTS" -o ! "$VIEWVC_DIR" -o ! "$CVS_USER" ]; then
-    echo "USAGE: $0 <CVS_ROOTS> <VIEWVC_DIR> <CVS_USER> [CVS_CRONJOB]"
+if [ ! "$CVSROOTS" -o ! "$VIEWVC_DIR" -o ! "$CVS_USER" -o ! "$CVS_GROUP" ]; then
+    echo "USAGE: $0 <CVS_ROOTS> <VIEWVC_DIR> <CVS_USER> <CVS_GROUP> [CVS_CRONJOB]"
     exit
 fi
 
 echo "*** Setting up commit hooks for CVS repositories (job=$CVS_CRONJOB)"
+chgrp $CVS_GROUP $VIEWVC_DIR
+chmod 775 $VIEWVC_DIR
 for CVSROOT in $CVSROOTS; do
 vcrootname=`basename $CVSROOT`
 if [ "$CVS_CRONJOB" ]; then

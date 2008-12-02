@@ -7,6 +7,7 @@ else
     cat >custis-install-config <<EOF
 CVS_CRONJOB=
 CVS_USER=www-data
+CVS_GROUP=cvs.users
 CVSROOTS=
 SVNROOT=
 SVN_FORBIDDENRE=
@@ -208,7 +209,7 @@ for i in `ls $SVNROOT`; do
 done;
 
 # setup hooks for CVS
-./setup-cvs-hooks "$CVSROOTS" "$VIEWVC_DIR" "$CVS_USER" "$CVS_CRONJOB"
+./setup-cvs-hooks "$CVSROOTS" "$VIEWVC_DIR" "$CVS_USER" "$CVS_GROUP" "$CVS_CRONJOB"
 
 # setup hooks for Subversion
 ./setup-svn-hooks "$SVNROOT" "$VIEWVC_DIR"
