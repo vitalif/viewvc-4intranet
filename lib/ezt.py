@@ -791,7 +791,7 @@ class UnknownFormatConstantError(EZTException):
 
 def _raw_printer(ctx, s):
   try: s = s.encode('utf-8')
-  except: 1
+  except: pass
   ctx.fp.write(s)
 
 def _html_printer(ctx, s):

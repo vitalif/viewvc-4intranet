@@ -41,6 +41,7 @@ import urllib
 import accept
 import compat
 import config
+import cvsdb
 import ezt
 import popen
 import sapi
@@ -2605,6 +2606,7 @@ class DiffSource:
 
     diff_code = line[0]
     output = self._format_text(line[1:])
+    output = cvsdb.utf8string(output)
     
     if diff_code == '+':
       if self.state == 'dump':

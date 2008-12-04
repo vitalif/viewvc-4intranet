@@ -29,6 +29,16 @@ error = "cvsdb error"
 ## defined to actually be complete; it should run well off of any DBI 2.0
 ## complient database interface
 
+def utf8string(value):
+    try: value = value.decode("utf-8")
+    except:
+        try: value = value.decode("cp1251")
+        except:
+            try: value = value.decode("iso-8859-1")
+            except: 1
+    value = value.encode("utf-8")
+    return value
+
 class CheckinDatabase:
     def __init__(self, host, port, socket, user, passwd, database, row_limit, min_relevance, authorizer = None):
         self._host = host
@@ -52,18 +62,8 @@ class CheckinDatabase:
         cursor = self.db.cursor()
         cursor.execute("SET AUTOCOMMIT=1")
 
-    def utf8string(self, value):
-        try: value = value.decode("utf-8")
-        except:
-            try: value = value.decode("cp1251")
-            except:
-                try: value = value.decode("iso-8859-1")
-                except: 1
-        value = value.encode("utf-8")
-        return value
-
     def sql_get_id(self, table, column, value, auto_set):
-        value = self.utf8string(value)
+        value = utf8string(value)
 
         sql = "SELECT id FROM %s WHERE %s=%%s" % (table, column)
         sql_args = (value, )
@@ -196,7 +196,7 @@ class CheckinDatabase:
         return self.get_list("repositories", repository)
 
     def SQLGetDescriptionID(self, description, auto_set = 1):
-        description = self.utf8string(description)
+        description = utf8string(description)
         ## lame string hash, blame Netscape -JMP
         hash = len(description)
 

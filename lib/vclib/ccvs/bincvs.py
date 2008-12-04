@@ -322,7 +322,7 @@ class BinCVSRepository(BaseCVSRepository):
     if self.itemtype(path_parts, rev) != vclib.FILE:  # does auth-check
       raise vclib.Error("Path '%s' is not a file."
                         % (string.join(path_parts, "/")))
-                        
+
     from vclib.ccvs import blame
     source = blame.BlameSource(self.rcsfile(path_parts, 1), rev)
     return source, source.revision
