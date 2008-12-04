@@ -46,7 +46,7 @@ fi
 EOF
     chmod 755 $VIEWVC_DIR/cvshook-$vcrootname
     cat >/etc/cron.d/viewvc-cvs-$vcrootname <<EOF
-*/5 * * * * $VIEWVC_DIR/cvshook-$vcrootname
+*/5 * * * * root $VIEWVC_DIR/cvshook-$vcrootname
 EOF
 fi
 done;
