@@ -2,6 +2,7 @@
 
 SVNROOT=$1
 VIEWVC_DIR=$2
+SVN_ASYNC=$3
 
 if [ ! "$SVNROOT" -o ! "$VIEWVC_DIR" ]; then
     echo "USAGE: $0 <SVNROOT> <VIEWVC_DIR>"
@@ -11,11 +12,25 @@ fi
 echo "*** Setting up commit hooks for Subversion"
 for i in `ls $SVNROOT`; do
     if [ -d "$SVNROOT/$i" ]; then
-        cat >"$SVNROOT/$i/hooks/post-commit.0" <<EOF
+        if [ "$SVN_ASYNC" ]; then
+            cat >"$SVNROOT/$i/hooks/post-commit.tmp" <<EOF
+#!/bin/sh
+echo "\$1 \$2" >> $VIEWVC_DIR/.svn-updated
+EOF
+        else
+            cat >"$SVNROOT/$i/hooks/post-commit.tmp" <<EOF
 #!/bin/sh
 $VIEWVC_DIR/bin/svndbadmin update \$1 \$2
 EOF
-        chmod 755 "$SVNROOT/$i/hooks/post-commit.0"
-        mv "$SVNROOT/$i/hooks/post-commit.0" "$SVNROOT/$i/hooks/post-commit"
+        fi
+        chmod 755 "$SVNROOT/$i/hooks/post-commit.tmp"
+        mv "$SVNROOT/$i/hooks/post-commit.tmp" "$SVNROOT/$i/hooks/post-commit"
     fi
 done;
+
+if [ "$SVN_ASYNC" ]; then
+    cat >/etc/cron.d/viewvc-svn <<EOF
+*/10 * * * * root $VIEWVC_DIR/bin/svnupdate-async.sh "$VIEWVC_DIR"
+EOF
+    /etc/init.d/cron reload
+fi

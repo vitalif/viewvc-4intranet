@@ -1,0 +1,50 @@
+#!/usr/bin/perl
+# Скрипт для обновления SVN репозиториев svndbadmin-ом
+# Берёт номера ревизий и имена репозиториев из перечисленных файлов или STDIN,
+# группирует их по номерам и выводит список команд, необходимых для обновления
+
+use strict;
+
+# первый аргумент - путь к svndbadmin
+my $svndbadmin = shift @ARGV
+    || die "USAGE: $0 <path_to_svndbadmin> FILES...";
+
+# считываем названия репозиториев и номера ревизий из файла
+my $tou = {};
+my ($repos, $rev);
+while (<>)
+{
+    s/^\s+//so;
+    s/\s+$//so;
+    ($repos, $rev) = split /\s+/, $_;
+    $tou->{$repos}->{$rev} = 1;
+}
+
+# превращаем номера ревизий в диапазоны ревизий
+my ($i, $j, $r, $nr);
+foreach $repos (keys %$tou)
+{
+    $rev = [ sort keys %{$tou->{$repos}} ];
+    $nr = [];
+    $j = 0;
+    for $i (1..@$rev)
+    {
+        if ($i > $#$rev || $rev->[$i]-$rev->[$j] > $i-$j)
+        {
+            $r = $rev->[$j];
+            $r .= ":".$rev->[$i-1] if $i-$j > 1;
+            push @$nr, $r;
+            $j = $i;
+        }
+    }
+    $tou->{$repos} = $nr;
+}
+
+# выводим список команд для выполнения
+foreach $repos (keys %$tou)
+{
+    foreach (@{$tou->{$repos}})
+    {
+        print "$svndbadmin update $repos $_\n";
+    }
+}

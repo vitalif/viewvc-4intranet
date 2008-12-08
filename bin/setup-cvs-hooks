@@ -4,20 +4,20 @@ CVSROOTS=$1
 VIEWVC_DIR=$2
 CVS_USER=$3
 CVS_GROUP=$4
-CVS_CRONJOB=$5
+CVS_ASYNC=$5
 
 if [ ! "$CVSROOTS" -o ! "$VIEWVC_DIR" -o ! "$CVS_USER" -o ! "$CVS_GROUP" ]; then
-    echo "USAGE: $0 <CVS_ROOTS> <VIEWVC_DIR> <CVS_USER> <CVS_GROUP> [CVS_CRONJOB]"
+    echo "USAGE: $0 <CVS_ROOTS> <VIEWVC_DIR> <CVS_USER> <CVS_GROUP> [CVS_ASYNC]"
     exit
 fi
 
-echo "*** Setting up commit hooks for CVS repositories (job=$CVS_CRONJOB)"
+echo "*** Setting up commit hooks for CVS repositories (job=$CVS_ASYNC)"
 chgrp $CVS_GROUP $VIEWVC_DIR
 chmod 775 $VIEWVC_DIR
 chmod 1777 .
 for CVSROOT in $CVSROOTS; do
 vcrootname=`basename $CVSROOT`
-if [ "$CVS_CRONJOB" ]; then
+if [ "$CVS_ASYNC" ]; then
     VHOOK="touch $VIEWVC_DIR/.cvs-updated-$vcrootname"
 else
     VHOOK="$VIEWVC_DIR/bin/cvsdbadmin update $CVSROOT >/dev/null"
@@ -36,7 +36,7 @@ cd ..
 rm -Rf CVSROOT
 fi
 EOSH
-if [ "$CVS_CRONJOB" ]; then
+if [ "$CVS_ASYNC" ]; then
     cat >$VIEWVC_DIR/cvshook-$vcrootname <<EOF
 #!/bin/sh
 if [ -e "$VIEWVC_DIR/.cvs-updated-$vcrootname" ]; then
@@ -51,7 +51,7 @@ EOF
 fi
 done;
 
-if [ "$CVS_CRONJOB" ]; then
+if [ "$CVS_ASYNC" ]; then
     echo "*** Reloading cron daemon"
     /etc/init.d/cron reload
 fi
