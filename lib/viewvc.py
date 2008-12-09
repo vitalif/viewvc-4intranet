@@ -730,10 +730,6 @@ _legal_params = {
   'rev'           : _re_validate_revnum,
   'tarball'       : _re_validate_number,
   'hidecvsroot'   : _re_validate_number,
-
-  # Vitaphoto global auth
-  'grant_global_auth' : _re_validate_number,
-  'grant_auth_value' : None,
   }
 
 def _path_join(path_parts):
@@ -1270,14 +1266,14 @@ def common_template_data(request, revision=None, mime_type=None):
       data['log_href'] = request.get_url(view_func=view_log,
                                          params={}, escape=1)
 
+  params = {}
+  if request.roottype == 'cvs' and request.pathrev:
+    params['branch'] = request.pathrev
+  data['queryform_href'] = request.get_url(view_func=view_queryform,
+                                           params=params,
+                                           escape=1)
   if is_querydb_nonempty_for_root(request):
     if request.pathtype == vclib.DIR:
-      params = {}
-      if request.roottype == 'cvs' and request.pathrev:
-        params['branch'] = request.pathrev
-      data['queryform_href'] = request.get_url(view_func=view_queryform,
-                                               params=params,
-                                               escape=1)
       data['rss_href'] = request.get_url(view_func=view_query,
                                          params={'date': 'month',
                                                  'format': 'rss'},
@@ -3730,7 +3726,7 @@ def view_query(request):
   # create the database query from the form data
   query = cvsdb.CreateCheckinQuery()
   if repos_root:
-    query.SetRepository(repos_root)
+    query.SetRepository(repos_root, repos_match)
   # treat "HEAD" specially ...
   if branch_match == 'exact' and branch == 'HEAD':
     query.SetBranch('')
