@@ -124,7 +124,7 @@ svn_config_dir =
 template_dir = templates
 use_cvsgraph = 1
 use_localtime = 1
-use_pagesize = 20
+use_pagesize = 0
 use_rcsparse = 0
 use_re_search = 0
 
