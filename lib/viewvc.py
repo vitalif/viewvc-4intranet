@@ -123,6 +123,43 @@ class Request:
                               string.split(http_accept_encoding, ","))):
         self.gzip_compress_level = 9  # make this configurable?
 
+  def create_repos(self, rootname):
+    if not rootname:
+      return None
+
+    roottype, rootpath, rootname = locate_root(self.cfg, rootname)
+    if roottype:
+      # Setup an Authorizer for this rootname and username
+      authorizer = setup_authorizer(self.cfg, self.username, self.rootname)
+
+      # Create the repository object
+      if roottype == 'cvs':
+        rootpath = vclib.ccvs.canonicalize_rootpath(rootpath)
+        repos = vclib.ccvs.CVSRepository(rootname,
+                                         rootpath,
+                                         authorizer,
+                                         self.cfg.utilities,
+                                         self.cfg.options.use_rcsparse)
+      elif roottype == 'svn':
+        rootpath = vclib.svn.canonicalize_rootpath(rootpath)
+        repos = vclib.svn.SubversionRepository(rootname,
+                                               rootpath,
+                                               authorizer,
+                                               self.cfg.utilities,
+                                               self.cfg.options.svn_config_dir)
+      else:
+        return None
+
+      repos.open()
+      return {
+        'repos'    : repos,
+        'rootname' : rootname,
+        'auth'     : authorizer,
+        'rootpath' : rootpath,
+      }
+
+    return None
+
   def run_viewvc(self):
 
     cfg = self.cfg
@@ -230,37 +267,18 @@ class Request:
     self.path_parts = path_parts
 
     if self.rootname:
-      roottype, rootpath = locate_root(cfg, self.rootname)
-      if roottype:
+      rcr = self.create_repos(self.rootname)
+      if rcr:
+        self.repos = rcr['repos']
+        self.rootpath = rcr['rootpath']
+        self.auth = rcr['auth']
         # Overlay root-specific options.
         cfg.overlay_root_options(self.rootname)
-        
-        # Setup an Authorizer for this rootname and username
-        self.auth = setup_authorizer(cfg, self.username, self.rootname)
+        if self.repos.roottype() == vclib.CVS:
+          # required so that spawned rcs programs correctly expand
+          # $CVSHeader$
+          os.environ['CVSROOT'] = self.rootpath
 
-        # Create the repository object
-        try:
-          if roottype == 'cvs':
-            self.rootpath = vclib.ccvs.canonicalize_rootpath(rootpath)
-            self.repos = vclib.ccvs.CVSRepository(self.rootname,
-                                                  self.rootpath,
-                                                  self.auth,
-                                                  cfg.utilities,
-                                                  cfg.options.use_rcsparse)
-            # required so that spawned rcs programs correctly expand
-            # $CVSHeader$
-            os.environ['CVSROOT'] = self.rootpath
-          elif roottype == 'svn':
-            self.rootpath = vclib.svn.canonicalize_rootpath(rootpath)
-            self.repos = vclib.svn.SubversionRepository(self.rootname,
-                                                        self.rootpath,
-                                                        self.auth,
-                                                        cfg.utilities,
-                                                        cfg.options.svn_config_dir)
-          else:
-            raise vclib.ReposNotFound()
-        except vclib.ReposNotFound:
-          pass
       if self.repos is None:
         raise debug.ViewVCException(
           'The root "%s" is unknown. If you believe the value is '
@@ -268,7 +286,6 @@ class Request:
           % self.rootname, "404 Not Found")
 
     if self.repos:
-      self.repos.open()
       type = self.repos.roottype()
       if type == vclib.SVN:
         self.roottype = 'svn'
@@ -438,7 +455,7 @@ class Request:
       hidden_values.append(_item(name=name, value=value))
     return action, hidden_values
 
-  def get_link(self, view_func=None, where=None, pathtype=None, params=None):
+  def get_link(self, view_func=None, where=None, pathtype=None, params=None, root=None):
     """Constructs a link pointing to another ViewVC page. All arguments
     correspond to members of the Request object. If they are set to 
     None they take values from the current page. Return value is a base
@@ -480,16 +497,16 @@ class Request:
       url = url + '/' + checkout_magic_path
 
     # add root to url
-    rootname = None
+    rootname = root
     if view_func is not view_roots:
       if cfg.options.root_as_url_component:
         # remove root from parameter list if present
-        try:
-          rootname = params['root']
-        except KeyError:
-          rootname = self.rootname
-        else:
+        if params.get('root',None):
+          if not rootname:
+            rootname = params.get('root',None)
           del params['root']
+        elif not rootname:
+          rootname = self.rootname
 
         # add root path component
         if rootname is not None:
@@ -504,7 +521,7 @@ class Request:
 
         # no need to specify default root
         if rootname == cfg.general.default_root:
-          del params['root']   
+          del params['root']
 
     # add 'pathrev' value to parameter list
     if (self.pathrev is not None
@@ -662,7 +679,7 @@ _legal_params = {
   'search'        : _validate_regex,
   'p1'            : None,
   'p2'            : None,
-  
+
   'hideattic'     : _re_validate_number,
   'limit_changes' : _re_validate_number,
   'sortby'        : _re_validate_alpha,
@@ -683,6 +700,8 @@ _legal_params = {
   'content-type'  : _re_validate_mimetype,
 
   # for query
+  'repos'         : _validate_regex,
+  'repos_match'   : _re_validate_alpha,
   'branch'        : _validate_regex,
   'branch_match'  : _re_validate_alpha,
   'dir'           : None,
@@ -711,9 +730,10 @@ _legal_params = {
   'rev'           : _re_validate_revnum,
   'tarball'       : _re_validate_number,
   'hidecvsroot'   : _re_validate_number,
-  
+
   # Vitaphoto global auth
   'grant_global_auth' : _re_validate_number,
+  'grant_auth_value' : None,
   }
 
 def _path_join(path_parts):
@@ -1191,6 +1211,7 @@ def common_template_data(request, revision=None, mime_type=None):
     'rss_href' : None,
     'roots_href' : request.get_url(view_func=view_roots, escape=1, params={}),
     'prefer_markup' : ezt.boolean(0),
+    'vitaphoto_url' : cfg.options.vitaphoto_url,
   }
 
   rev = revision
@@ -3305,9 +3326,7 @@ def view_revision(request):
 
 def is_query_supported(request):
   """Returns true if querying is supported for the given path."""
-  return request.cfg.cvsdb.enabled \
-         and request.pathtype == vclib.DIR \
-         and request.roottype in ['cvs', 'svn']
+  return request.cfg.cvsdb.enabled
 
 def is_querydb_nonempty_for_root(request):
   """Return 1 iff commits database integration is supported *and* the
@@ -3337,6 +3356,11 @@ def view_queryform(request):
     request.get_form(view_func=view_query, params={'limit_changes': None})
 
   # default values ...
+  data['repos'] = request.query_dict.get('repos', '')
+  data['repos_match'] = request.query_dict.get('repos_match', 'exact')
+  if not data['repos']:
+    data['repos'] = request.rootpath
+    data['repos_match'] = 'exact'
   data['branch'] = request.query_dict.get('branch', '')
   data['branch_match'] = request.query_dict.get('branch_match', 'exact')
   data['dir'] = request.query_dict.get('dir', '')
@@ -3474,7 +3498,8 @@ def build_commit(request, files, max_files, dir_strip, format):
   plus_count = 0
   minus_count = 0
   found_unreadable = 0
-  
+  all_repos = {}
+
   for f in files:
     dirname = f.GetDirectory()
     filename = f.GetFile()
@@ -3501,13 +3526,18 @@ def build_commit(request, files, max_files, dir_strip, format):
     if request.roottype == 'cvs':
       where = where.encode(cfg.options.cvs_ondisk_charset)
     path_parts = _path_parts(where)
+    my_repos = all_repos.get(f.GetRepository(), '')
+    if not my_repos:
+      my_repos = all_repos[f.GetRepository()] = request.create_repos(f.GetRepository())
+    if not my_repos:
+      raise vclib.ItemNotFound(path_parts)
     if path_parts:
       # Skip files in CVSROOT if asked to hide such.
       if cfg.options.hide_cvsroot \
          and is_cvsroot_path(request.roottype, path_parts):
         found_unreadable = 1
         continue
-      
+
       # We have to do a rare authz check here because this data comes
       # from the CVSdb, not from the vclib providers.
       #
@@ -3518,32 +3548,32 @@ def build_commit(request, files, max_files, dir_strip, format):
       # but to omit as unauthorized paths the authorization logic
       # can't find.
       try:
-        readable = vclib.check_path_access(request.repos, path_parts,
+        readable = vclib.check_path_access(my_repos['repos'], path_parts,
                                            None, exam_rev)
       except vclib.ItemNotFound:
         readable = 0
       if not readable:
         found_unreadable = 1
         continue
-         
+
     if request.roottype == 'svn':
       params = { 'pathrev': exam_rev }
     else:
       params = { 'revision': exam_rev, 'pathrev': f.GetBranch() or None }  
-    
-    dir_href = request.get_url(view_func=view_directory,
+
+    dir_href = request.get_url(root=my_repos['rootname'], view_func=view_directory,
                                where=dirname, pathtype=vclib.DIR,
                                params=params, escape=1)
-    log_href = request.get_url(view_func=view_log,
+    log_href = request.get_url(root=my_repos['rootname'], view_func=view_log,
                                where=where, pathtype=vclib.FILE,
                                params=params, escape=1)
     diff_href = view_href = download_href = None
     if 'markup' in cfg.options.allowed_views:
-      view_href = request.get_url(view_func=view_markup,
+      view_href = request.get_url(root=my_repos['rootname'], view_func=view_markup,
                                   where=where, pathtype=vclib.FILE,
                                   params=params, escape=1)
     if 'co' in cfg.options.allowed_views:
-      download_href = request.get_url(view_func=view_checkout,
+      download_href = request.get_url(root=my_repos['rootname'], view_func=view_checkout,
                                       where=where, pathtype=vclib.FILE,
                                       params=params, escape=1)
     if change_type == 'Change':
@@ -3553,7 +3583,7 @@ def build_commit(request, files, max_files, dir_strip, format):
         'r2': rev,
         'diff_format': None
         })
-      diff_href = request.get_url(view_func=view_diff,
+      diff_href = request.get_url(root=my_repos['rootname'], view_func=view_diff,
                                   where=where, pathtype=vclib.FILE,
                                   params=diff_href_params, escape=1)
     mime_type = calculate_mime_type(request, path_parts, exam_rev)
@@ -3564,7 +3594,7 @@ def build_commit(request, files, max_files, dir_strip, format):
     minus = int(f.GetMinusCount())
     plus_count = plus_count + plus
     minus_count = minus_count + minus
-    
+
     num_allowed = num_allowed + 1
     if max_files and num_allowed > max_files:
       continue
@@ -3654,6 +3684,8 @@ def view_query(request):
   cfg = request.cfg
 
   # get form data
+  repos_root = request.query_dict.get('repos', '')
+  repos_match = request.query_dict.get('repos_match', 'exact')
   branch = request.query_dict.get('branch', '')
   branch_match = request.query_dict.get('branch_match', 'exact')
   dir = request.query_dict.get('dir', '')
@@ -3692,15 +3724,14 @@ def view_query(request):
   import cvsdb
 
   db = cvsdb.ConnectDatabaseReadOnly(cfg, request.auth)
-  repos_root, repos_dir = cvsdb.FindRepository(db, request.rootpath)
-  if not repos_root:
-    raise debug.ViewVCException(
-      "The root '%s' was not found in the commit database "
-      % request.rootname)
+  repos_dir = []
+  if not repos_root and request.rootpath:
+    repos_root, repos_dir = cvsdb.FindRepository(db, request.rootpath)
 
   # create the database query from the form data
   query = cvsdb.CreateCheckinQuery()
-  query.SetRepository(repos_root)
+  if repos_root:
+    query.SetRepository(repos_root)
   # treat "HEAD" specially ...
   if branch_match == 'exact' and branch == 'HEAD':
     query.SetBranch('')
@@ -3771,7 +3802,7 @@ def view_query(request):
       # base modification time on the newest commit
       if commit.GetTime() > mod_time:
         mod_time = commit.GetTime()
-        
+
       # For CVS, group commits with the same commit message.
       # For Subversion, group them only if they have the same revision number
       if request.roottype == 'cvs':
@@ -3908,8 +3939,8 @@ def find_root_in_parents(cfg, rootname, roottype):
 
   # Easy out:  caller wants rootname "CVSROOT", and we're hiding those.
   if rootname == 'CVSROOT' and cfg.options.hide_cvsroot:
-    return None
-  
+    return None, None
+
   for pp in cfg.general.root_parents:
     pos = string.rfind(pp, ':')
     if pos < 0:
@@ -3918,7 +3949,7 @@ def find_root_in_parents(cfg, rootname, roottype):
     if repo_type != roottype:
       continue
     pp = os.path.normpath(string.strip(pp[:pos]))
-    
+
     if roottype == 'cvs':
       roots = vclib.ccvs.expand_root_parent(pp)
     elif roottype == 'svn':
@@ -3926,25 +3957,35 @@ def find_root_in_parents(cfg, rootname, roottype):
     else:
       roots = {}
     if roots.has_key(rootname):
-      return roots[rootname]
-  return None
+      return roots[rootname], rootname
+    for (k, v) in roots.iteritems():
+      if v == rootname:
+        return rootname, k
+  return None, None
 
 def locate_root(cfg, rootname):
-  """Return a 2-tuple ROOTTYPE, ROOTPATH for configured ROOTNAME."""
+  """Return a 3-tuple ROOTTYPE, ROOTPATH, ROOTNAME for configured ROOTNAME.
+  ROOTNAME can be a path initially"""
   if cfg.general.cvs_roots.has_key(rootname):
-    return 'cvs', cfg.general.cvs_roots[rootname]
-  path_in_parent = find_root_in_parents(cfg, rootname, 'cvs')
+    return 'cvs', cfg.general.cvs_roots[rootname], rootname
+  for (k, v) in cfg.general.cvs_roots.iteritems():
+    if v == rootname:
+      return 'cvs', rootname, k
+  path_in_parent, rootname_in_parent = find_root_in_parents(cfg, rootname, 'cvs')
   if path_in_parent:
-    cfg.general.cvs_roots[rootname] = path_in_parent
-    return 'cvs', path_in_parent
+    cfg.general.cvs_roots[rootname_in_parent] = path_in_parent
+    return 'cvs', path_in_parent, rootname_in_parent
   if cfg.general.svn_roots.has_key(rootname):
-    return 'svn', cfg.general.svn_roots[rootname]
-  path_in_parent = find_root_in_parents(cfg, rootname, 'svn')
+    return 'svn', cfg.general.svn_roots[rootname], rootname
+  for (k, v) in cfg.general.svn_roots.iteritems():
+    if v == rootname:
+      return 'svn', rootname, k
+  path_in_parent, rootname_in_parent = find_root_in_parents(cfg, rootname, 'svn')
   if path_in_parent:
-    cfg.general.svn_roots[rootname] = path_in_parent
-    return 'svn', path_in_parent
-  return None, None
-  
+    cfg.general.svn_roots[rootname_in_parent] = path_in_parent
+    return 'svn', path_in_parent, rootname_in_parent
+  return None, None, None
+
 def load_config(pathname=None, server=None):
   debug.t_start('load-config')
 
