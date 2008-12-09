@@ -1376,7 +1376,7 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
       lines = []
       line_no = 0
       while 1:
-        line = fp.readline()
+        line = cvsdb.utf8string(fp.readline())
         if not line:
           break
         line_no = line_no + 1
