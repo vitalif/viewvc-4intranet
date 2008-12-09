@@ -2107,7 +2107,10 @@ def view_log(request):
     entry.ago = None
     if rev.date is not None:
       entry.ago = html_time(request, rev.date, 1)
-    entry.log = htmlify(rev.log or "", cfg.options.mangle_email_addresses)
+    entry.log = rev.log or ""
+    if cvs:
+      entry.log = cvsdb.utf8string(entry.log)
+    entry.log = htmlify(entry.log, cfg.options.mangle_email_addresses)
     entry.size = rev.size
     entry.lockinfo = rev.lockinfo
     entry.branch_point = None
