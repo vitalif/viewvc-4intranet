@@ -3373,8 +3373,10 @@ def view_queryform(request):
   data['limit_changes'] = int(request.query_dict.get('limit_changes',
                                            request.cfg.options.limit_changes))
 
-  data['dir_href'] = request.get_url(view_func=view_directory, params={},
-                                     escape=1)
+  if request.rootpath:
+    data['dir_href'] = request.get_url(view_func=view_directory, params={}, escape=1)
+  else:
+    data['dir_href'] = request.get_url(view_func=view_roots, params={}, escape=1)
 
   generate_page(request, "query_form", data)
 
