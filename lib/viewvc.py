@@ -1211,7 +1211,6 @@ def common_template_data(request, revision=None, mime_type=None):
     'rss_href' : None,
     'roots_href' : request.get_url(view_func=view_roots, escape=1, params={}),
     'prefer_markup' : ezt.boolean(0),
-    'vitaphoto_url' : cfg.options.vitaphoto_url,
   }
 
   rev = revision
