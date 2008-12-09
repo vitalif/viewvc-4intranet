@@ -5,6 +5,10 @@
 
 [include "include/header.ezt" "directory"]
 
+[if-any queryform_href]
+<p><a href="[queryform_href]">Query revision history</a></p>
+[end]
+
 <table cellspacing="1" cellpadding="2">
 <thead>
 <tr>

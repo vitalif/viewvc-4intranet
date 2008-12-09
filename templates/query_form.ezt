@@ -14,6 +14,32 @@ Browse Directory</a></p>
 <div class="vc_query_form">
   [for query_hidden_values]<input type="hidden" name="[query_hidden_values.name]" value="[query_hidden_values.value]"/>[end]
 <table cellspacing="0" cellpadding="5" class="auto">
+  <tr>
+    <th style="text-align:right;vertical-align:top;">Repository:</th>
+    <td>
+      <input type="text" name="repos" value="[repos]" /><br />
+      <label for="repos_match_exact">
+        <input type="radio" name="repos_match" id="repos_match_exact"
+           value="exact" [is repos_match "exact"]checked="checked"[end] />
+        Exact match
+      </label>
+      <label for="repos_match_glob">
+        <input type="radio" name="repos_match" id="repos_match_glob"
+           value="glob" [is repos_match "glob"]checked="checked"[end] />
+        Glob pattern match
+      </label>
+      <label for="repos_match_regex">
+        <input type="radio" name="repos_match" id="repos_match_regex"
+           value="regex" [is repos_match "regex"]checked="checked"[end] />
+        Regex match
+      </label>
+      <label for="repos_match_notregex">
+        <input type="radio" name="repos_match" id="repos_match_notregex"
+           value="notregex" [is repos_match "notregex"]checked="checked"[end] />
+        Regex doesn't match
+      </label>
+    </td>
+  </tr>
   [is roottype "cvs"]
   [# For subversion, the branch field is not used ]
   <tr>
