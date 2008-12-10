@@ -1512,9 +1512,9 @@ def markup_or_annotate(request, is_annotate):
         request.ms_fail = 1
     if request.ms:
       try:
-        fp.seek(0)
+        fp, revision = request.repos.openfile(path, rev)
         buffer = fp.read(magic_buf_size)
-        fp.seek(0)
+        fp.close()
         mime_type = request.ms.buffer(buffer)
       except:
         pass
