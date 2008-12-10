@@ -67,6 +67,7 @@ docroot_magic_path = '*docroot*'
 viewcvs_mime_type = 'text/vnd.viewcvs-markup'
 alt_mime_type = 'text/x-cvsweb-markup'
 view_roots_magic = '*viewroots*'
+magic_buf_size = 4096
 
 # Put here the variables we need in order to hold our state - they
 # will be added (with their current value) to (almost) any link/query
@@ -100,6 +101,7 @@ class Request:
   def __init__(self, server, cfg):
     self.server = server
     self.cfg = cfg
+    self.cfg.options.binary_mime_re = re.compile(self.cfg.options.binary_mime_re)
 
     self.script_name = _normalize_path(server.getenv('SCRIPT_NAME', ''))
     self.browser = server.getenv('HTTP_USER_AGENT', 'unknown')
@@ -113,6 +115,10 @@ class Request:
 
     # check for an authenticated username
     self.username = server.getenv('REMOTE_USER')
+
+    # construct MIME magic
+    self.ms = None
+    self.ms_fail = 0
 
     # if we allow compressed output, see if the client does too
     self.gzip_compress_level = 0
@@ -989,6 +995,9 @@ def guess_mime(filename):
 def is_viewable_image(mime_type):
   return mime_type and mime_type in ('image/gif', 'image/jpeg', 'image/png')
 
+def is_binary(cfg, mime_type):
+  return mime_type and re.match(cfg.options.binary_mime_re, mime_type)
+
 def is_text(mime_type):
   return not mime_type or mime_type[:5] == 'text/'
 
@@ -1335,6 +1344,7 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
   # Reasons not to include a) being told not to by the configuration,
   # b) not being able to import the Pygments modules, and c) Pygments
   # not having a lexer for our file's format.
+
   blame_source = []
   if blame_data:
     for i in blame_data:
@@ -1376,9 +1386,10 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
       lines = []
       line_no = 0
       while 1:
-        line = cvsdb.utf8string(fp.readline())
+        line = fp.readline()
         if not line:
           break
+        line = cvsdb.utf8string(line)
         line_no = line_no + 1
         item = vclib.Annotation(cgi.escape(line), line_no,
                                 None, None, None, None)
@@ -1490,18 +1501,41 @@ def markup_or_annotate(request, is_annotate):
   revision = None
   mime_type = calculate_mime_type(request, path, rev)
 
-  # Is this a viewable image type?
-  if is_viewable_image(mime_type) \
-     and 'co' in cfg.options.allowed_views:
+  if not mime_type:
+    if request.ms is None and not request.ms_fail:
+      try:
+        import magic
+        request.ms = magic.open(magic.MAGIC_NONE | magic.MAGIC_MIME_TYPE)
+        request.ms.load()
+      except:
+        request.ms_fail = 1
+    if request.ms:
+      try:
+        fp.seek(0)
+        buffer = fp.read(magic_buf_size)
+        fp.seek(0)
+        mime_type = request.ms.buffer(buffer)
+      except:
+        pass
+
+  # Is this a binary type?
+  if is_binary(request.cfg, mime_type):
     fp, revision = request.repos.openfile(path, rev)
     fp.close()
     if check_freshness(request, None, revision, weak=1):
       return
     annotation = 'binary'
-    image_src_href = request.get_url(view_func=view_checkout,
-                                     params={'revision': rev}, escape=1)
+    if 'co' in cfg.options.allowed_views:
+      # Is this a viewable image type?
+      if is_viewable_image(mime_type) \
+         and 'co' in cfg.options.allowed_views:
+        image_src_href = request.get_url(view_func=view_checkout,
+                                         params={'revision': rev}, escape=1)
+      else:
+        download_href = request.get_url(view_func=view_checkout,
+                                        params={'revision': rev}, escape=1)
 
-  # Not a viewable image.
+  # Text type
   else:
     blame_source = None
     if is_annotate:
@@ -1584,9 +1618,9 @@ def markup_or_annotate(request, is_annotate):
                                         pathtype=vclib.FILE,
                                         params={'pathrev': revision},
                                         escape=1)
-    
+
   generate_page(request, "file", data)
-  
+
 def view_markup(request):
   if 'markup' not in request.cfg.options.allowed_views:
     raise debug.ViewVCException('Markup view is disabled',
@@ -1748,7 +1782,7 @@ def view_directory(request):
   rows = [ ]
   num_displayed = 0
   num_dead = 0
-  
+
   # set some values to be used inside loop
   where = request.where
   where_prefix = where and where + '/'
@@ -2557,11 +2591,11 @@ class DiffSource:
   def _format_text(self, text):
     text = string.expandtabs(string.rstrip(text))
     hr_breakable = self.cfg.options.hr_breakable
-    
+
     # in the code below, "\x01" will be our stand-in for "&". We don't want
     # to insert "&" because it would get escaped by htmlify().  Similarly,
     # we use "\x02" as a stand-in for "<br>"
-  
+
     if hr_breakable > 1 and len(text) > hr_breakable:
       text = re.sub('(' + ('.' * hr_breakable) + ')', '\\1\x02', text)
     if hr_breakable:
@@ -2574,7 +2608,7 @@ class DiffSource:
     text = string.replace(text, '\x02',
                           '<span style="color:red">\</span><br />')
     return text
-    
+
   def _get_row(self):
     if self.state[:5] == 'flush':
       item = self._flush_row()
@@ -2614,7 +2648,7 @@ class DiffSource:
                    line_info_left=match.group(1),
                    line_info_right=match.group(2),
                    line_info_extra=match.group(3))
-    
+
     if line[0] == '\\':
       # \ No newline at end of file
 
@@ -2626,7 +2660,7 @@ class DiffSource:
     diff_code = line[0]
     output = self._format_text(line[1:])
     output = cvsdb.utf8string(output)
-    
+
     if diff_code == '+':
       if self.state == 'dump':
         self.line_number = self.line_number + 1
@@ -2782,7 +2816,7 @@ def setup_diff(request):
     else:
       rev1 = r1[:idx]
       sym1 = r1[idx+1:]
-      
+
   if r2 == 'text':
     rev2 = query_dict.get('tr2', None)
     if not rev2:
@@ -2804,7 +2838,7 @@ def setup_diff(request):
     except vclib.InvalidRevision:
       raise debug.ViewVCException('Invalid revision(s) passed to diff',
                                   '400 Bad Request')
-    
+
   p1 = _get_diff_path_parts(request, 'p1', rev1, request.pathrev)
   p2 = _get_diff_path_parts(request, 'p2', rev2, request.pathrev)
 
@@ -2836,7 +2870,7 @@ def view_patch(request):
   else:
     raise debug.ViewVCException('Diff format %s not understood'
                                  % format, '400 Bad Request')
-  
+
   try:
     fp = request.repos.rawdiff(p1, rev1, p2, rev2, diff_type)
   except vclib.InvalidRevision:
@@ -2856,7 +2890,7 @@ def view_diff(request):
   cfg = request.cfg
   query_dict = request.query_dict
   p1, p2, rev1, rev2, sym1, sym2 = setup_diff(request)
-  
+
   # since templates are in use and subversion allows changes to the dates,
   # we can't provide a strong etag
   if check_freshness(request, None, '%s-%s' % (rev1, rev2), weak=1):
@@ -2915,7 +2949,7 @@ def view_diff(request):
       else:
         unified = idiff.unified(lines_left, lines_right,
                                 diff_options.get("context", 2))
-    else: 
+    else:
       fp = request.repos.rawdiff(p1, rev1, p2, rev2, diff_type, diff_options)
   except vclib.InvalidRevision:
     raise debug.ViewVCException('Invalid path(s) or revision(s) passed '
@@ -2949,13 +2983,13 @@ def view_diff(request):
   left.view_href, left.download_href, left.download_text_href, \
     left.annotate_href, left.revision_href, left.prefer_markup \
     = get_file_view_info(request, path_left, rev1)
-  
+
   right = _item(date=rcsdiff_date_reformat(date2, cfg),
                 path=path_right, rev=rev2, tag=sym2)
   right.view_href, right.download_href, right.download_text_href, \
     right.annotate_href, right.revision_href, right.prefer_markup \
     = get_file_view_info(request, path_right, rev2)
-      
+
   data = common_template_data(request)
   data.update({
     'left' : left,
@@ -3053,7 +3087,7 @@ def generate_tarball(out, request, reldir, stack, dir_mtime=None):
     tar_dir = tar_dir + _path_join(reldir) + '/'
 
   cvs = request.roottype == 'cvs'
-  
+
   # If our caller doesn't dictate a datestamp to use for the current
   # directory, its datestamps will be the youngest of the datestamps
   # of versioned items in that subdirectory.  We'll be ignoring dead
@@ -3128,14 +3162,14 @@ def generate_tarball(out, request, reldir, stack, dir_mtime=None):
 
 def download_tarball(request):
   cfg = request.cfg
-  
+
   if 'tar' not in request.cfg.options.allowed_views:
     raise debug.ViewVCException('Tarball generation is disabled',
                                  '403 Forbidden')
 
   if debug.TARFILE_PATH:
     fp = open(debug.TARFILE_PATH, 'w')
-  else:    
+  else:
     tarfile = request.rootname
     if request.path_parts:
       tarfile = "%s-%s" % (tarfile, request.path_parts[-1])
@@ -3261,7 +3295,7 @@ def view_revision(request):
                                                    'r2' : str(change.base_rev),
                                                    },
                                            escape=1)
-    
+
 
     # use same variable names as the log template
     change.path = _path_join(change.path_parts)
@@ -3382,7 +3416,7 @@ def view_queryform(request):
 
 def parse_date(datestr):
   """Parse a date string from the query form."""
-  
+
   match = re.match(r'^(\d\d\d\d)-(\d\d)-(\d\d)(?:\ +'
                    '(\d\d):(\d\d)(?::(\d\d))?)?$', datestr)
   if match:
@@ -3824,7 +3858,7 @@ def view_query(request):
       limited_files = 0
       current_desc = commit_desc
       current_rev = commit_rev
-      
+
     # we need to tack on our last commit grouping, if any
     commit_item = build_commit(request, files, limit_changes,
                                dir_strip, format)
@@ -3833,7 +3867,7 @@ def view_query(request):
       plus_count = plus_count + commit_item.plus
       minus_count = minus_count + commit_item.minus
       commits.append(commit_item)
-  
+
   # only show the branch column if we are querying all branches
   # or doing a non-exact branch match on a CVS repository.
   show_branch = ezt.boolean(request.roottype == 'cvs' and
@@ -3908,7 +3942,7 @@ for code, view in _views.items():
 def list_roots(request):
   cfg = request.cfg
   allroots = { }
-  
+
   # Add the viewable Subversion roots
   for root in cfg.general.svn_roots.keys():
     auth = setup_authorizer(cfg, request.username, root)
@@ -3928,7 +3962,7 @@ def list_roots(request):
     except vclib.ReposNotFound:
       continue
     allroots[root] = [cfg.general.cvs_roots[root], 'cvs']
-    
+
   return allroots
 
 def find_root_in_parents(cfg, rootname, roottype):
@@ -3999,7 +4033,7 @@ def load_config(pathname=None, server=None):
   # load mime types file
   if cfg.general.mime_types_file:
     mimetypes.init([cfg.general.mime_types_file])
-  
+
   debug.t_end('load-config')
   return cfg
 
@@ -4013,7 +4047,7 @@ def view_error(server, cfg):
     exc_dict['stacktrace'] = htmlify(exc_dict['stacktrace'],
                                      mangle_email_addrs=0)
   handled = 0
-  
+
   # use the configured error template if possible
   try:
     if cfg and not server.headerSent:
