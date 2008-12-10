@@ -68,6 +68,7 @@ viewcvs_mime_type = 'text/vnd.viewcvs-markup'
 alt_mime_type = 'text/x-cvsweb-markup'
 view_roots_magic = '*viewroots*'
 magic_buf_size = 4096
+default_mime_type = 'application/octet-stream'
 
 # Put here the variables we need in order to hold our state - they
 # will be added (with their current value) to (almost) any link/query
@@ -1501,11 +1502,11 @@ def markup_or_annotate(request, is_annotate):
   revision = None
   mime_type = calculate_mime_type(request, path, rev)
 
-  if not mime_type:
+  if not mime_type or mime_type == default_mime_type:
     if request.ms is None and not request.ms_fail:
       try:
         import magic
-        request.ms = magic.open(magic.MAGIC_NONE | magic.MAGIC_MIME_TYPE)
+        request.ms = magic.open(magic.MAGIC_NONE | magic.MAGIC_MIME)
         request.ms.load()
       except:
         request.ms_fail = 1
