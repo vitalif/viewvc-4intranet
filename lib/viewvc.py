@@ -1819,7 +1819,7 @@ def view_directory(request):
          and is_cvsroot_path(request.roottype,
                              request.path_parts + [file.name]):
         continue
-    
+
       row.view_href = request.get_url(view_func=view_directory,
                                       where=where_prefix+file.name,
                                       pathtype=vclib.DIR,
@@ -1843,7 +1843,7 @@ def view_directory(request):
                                        pathtype=vclib.DIR,
                                        params={},
                                        escape=1)
-      
+
     elif file.kind == vclib.FILE:
       if searchstr is not None:
         if request.roottype == 'cvs' and (file.errors or file.dead):
@@ -1855,11 +1855,11 @@ def view_directory(request):
         num_dead = num_dead + 1
         if hideattic:
           continue
-        
+
       num_displayed = num_displayed + 1
 
       file_where = where_prefix + file.name
-      if request.roottype == 'svn': 
+      if request.roottype == 'svn':
         row.size = file.size
 
       row.mime_type = calculate_mime_type(request, _path_parts(file_where),
@@ -3556,7 +3556,10 @@ def build_commit(request, files, max_files, dir_strip, format):
     # Check path access (since the commits database logic bypasses the
     # vclib layer and, thus, the vcauth stuff that layer uses).
     if request.roottype == 'cvs':
-      where = where.encode(cfg.options.cvs_ondisk_charset)
+      try: where = unicode(where,'utf-8')
+      except: pass
+      try: where = where.encode(cfg.options.cvs_ondisk_charset)
+      except: pass
     path_parts = _path_parts(where)
     my_repos = all_repos.get(f.GetRepository(), '')
     if not my_repos:
