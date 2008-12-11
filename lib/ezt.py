@@ -795,9 +795,13 @@ def _raw_printer(ctx, s):
   ctx.fp.write(s)
 
 def _html_printer(ctx, s):
+  try: s = s.encode('utf-8')
+  except: pass
   ctx.fp.write(cgi.escape(s))
 
 def _uri_printer(ctx, s):
+  try: s = s.encode('utf-8')
+  except: pass
   ctx.fp.write(urllib.quote(s))
 
 _printers = {
@@ -822,7 +826,7 @@ def test_parse():
          ['', '["a \\"b[foo]" c.d f]', None, '']
 
 def _test(argv):
-  import doctest, ezt           
+  import doctest, ezt
   verbose = "-v" in argv
   return doctest.testmod(ezt, verbose=verbose)
 
