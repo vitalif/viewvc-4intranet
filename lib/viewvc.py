@@ -959,7 +959,10 @@ def nav_path(request):
     path_parts.append(part)
     is_last = len(path_parts) == len(request.path_parts)
 
-    item = _item(name=part, href=None)
+    if request.roottype == 'cvs':
+      item = _item(name=cvsdb.utf8string(part), href=None)
+    else:
+      item = _item(name=part, href=None)
 
     if not is_last or (is_dir and request.view_func is not view_directory):
       item.href = request.get_url(view_func=view_directory,
@@ -1185,6 +1188,10 @@ def html_time(request, secs, extended=0):
 
 def common_template_data(request, revision=None, mime_type=None):
   cfg = request.cfg
+  where = request.where
+  if request.roottype == 'cvs':
+    where = cvsdb.utf8string(where)
+  where = request.server.escape(where)
   data = {
     'cfg' : cfg,
     'vsn' : __version__,
@@ -1193,7 +1200,7 @@ def common_template_data(request, revision=None, mime_type=None):
                 and request.script_name + '/' + docroot_magic_path \
                 or cfg.options.docroot,
     'username' : request.username,
-    'where' : request.server.escape(request.where),
+    'where'    : where,
     'roottype' : request.roottype,
     'rootname' : request.rootname \
                  and request.server.escape(request.rootname) or None,
@@ -1808,8 +1815,8 @@ def view_directory(request):
       row.short_log = format_log(file.log, cfg)
       row.log = htmlify(file.log, cfg.options.mangle_email_addresses)
     row.lockinfo = file.lockinfo
-    row.anchor = request.server.escape(file.name)
-    row.name = request.server.escape(file.name)
+    row.name = request.server.escape(cvsdb.utf8string(file.name))
+    row.anchor = row.name
     row.pathtype = (file.kind == vclib.FILE and 'file') or \
                    (file.kind == vclib.DIR and 'dir')
     row.errors = file.errors
