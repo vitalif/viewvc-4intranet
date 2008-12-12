@@ -21,6 +21,7 @@ import stat
 import string
 import re
 import time
+import cvsdb
 
 # ViewVC libs
 import compat
@@ -832,6 +833,8 @@ def _parse_log_entry(fp):
     if tm[0] < EPOCH:
       raise ValueError, 'invalid year'
   date = compat.timegm(tm)
+
+  log = cvsdb.utf8string(log)
 
   return Revision(rev, date,
                   # author, state, lines changed

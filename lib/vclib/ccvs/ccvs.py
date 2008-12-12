@@ -19,6 +19,7 @@ import tempfile
 import vclib
 import rcsparse
 import blame
+import cvsdb
 
 ### The functionality shared with bincvs should probably be moved to a
 ### separate module
@@ -66,6 +67,7 @@ class CCVSRepository(BaseCVSRepository):
         entry.path = path
         try:
           rcsparse.parse(open(path, 'rb'), InfoSink(entry, rev, alltags))
+          entry.log = cvsdb.utf8string(entry.log)
         except IOError, e:
           entry.errors.append("rcsparse error: %s" % e)
         except RuntimeError, e:
