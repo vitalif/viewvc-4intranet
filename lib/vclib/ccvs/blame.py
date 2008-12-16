@@ -32,6 +32,7 @@ import time
 import math
 import rcsparse
 import vclib
+import cvsdb
 
 class CVSParser(rcsparse.Sink):
   # Precompiled regular expressions
@@ -446,7 +447,7 @@ class BlameSource:
     prev_rev = self.parser.prev_revision.get(rev)
     line_number = idx + 1
     author = self.parser.revision_author[rev]
-    thisline = self.lines[idx]
+    thisline = cvsdb.utf8string(self.lines[idx])
     ### TODO:  Put a real date in here.
     item = vclib.Annotation(thisline, line_number, rev, prev_rev, author, None)
     self.last = item
