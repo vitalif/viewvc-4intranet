@@ -310,7 +310,8 @@ class BinCVSRepository(BaseCVSRepository):
     return filtered_revs
 
   def rcs_popen(self, rcs_cmd, rcs_args, mode, capture_err=1):
-    if self.utilities.cvsnt:
+    # fucking cvsnt does not accept context = -1 in rcsdiff
+    if self.utilities.cvsnt and rcs_cmd != 'rcsdiff':
       cmd = self.utilities.cvsnt
       args = ['rcsfile', rcs_cmd]
       args.extend(list(rcs_args))
@@ -353,7 +354,6 @@ class BinCVSRepository(BaseCVSRepository):
     if path_parts1 != path_parts2:
       raise NotImplementedError, "cannot diff across paths in cvs"
     args.extend(['-r' + rev1, '-r' + rev2, rcsfile])
-    
     fp = self.rcs_popen('rcsdiff', args, 'rt')
 
     # Eat up the non-GNU-diff-y headers.
