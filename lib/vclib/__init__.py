@@ -328,7 +328,7 @@ def _diff_args(type, options):
   if type == CONTEXT:
     if options.has_key('context'):
       if options['context'] is None:
-        args.append('--context=-1')
+        args.append('--context=%i' % 0x7fffffff)
       else:
         args.append('--context=%i' % options['context'])
     else:

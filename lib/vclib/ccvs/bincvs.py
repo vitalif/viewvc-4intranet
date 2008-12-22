@@ -310,8 +310,7 @@ class BinCVSRepository(BaseCVSRepository):
     return filtered_revs
 
   def rcs_popen(self, rcs_cmd, rcs_args, mode, capture_err=1):
-    # fucking cvsnt does not accept context = -1 in rcsdiff
-    if self.utilities.cvsnt and rcs_cmd != 'rcsdiff':
+    if self.utilities.cvsnt:
       cmd = self.utilities.cvsnt
       args = ['rcsfile', rcs_cmd]
       args.extend(list(rcs_args))
