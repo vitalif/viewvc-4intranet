@@ -328,7 +328,7 @@ def _diff_args(type, options):
   if type == CONTEXT:
     if options.has_key('context'):
       if options['context'] is None:
-        args.append('--context=%i' % 0x7fffffff)
+        args.append('--context=%i' % 0x01ffffff)
       else:
         args.append('--context=%i' % options['context'])
     else:
@@ -336,7 +336,7 @@ def _diff_args(type, options):
   elif type == UNIFIED:
     if options.has_key('context'):
       if options['context'] is None:
-        args.append('--unified=-1')
+        args.append('--unified=%i' % 0x01ffffff)
       else:
         args.append('--unified=%i' % options['context'])
     else:
