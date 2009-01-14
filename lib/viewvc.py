@@ -36,6 +36,7 @@ import tempfile
 import time
 import types
 import urllib
+import datetime
 
 # These modules come from our library (the stub has set up the path)
 import accept
@@ -163,6 +164,7 @@ class Request:
         'rootname' : rootname,
         'auth'     : authorizer,
         'rootpath' : rootpath,
+        'roottype' : roottype,
       }
 
     return None
@@ -1320,13 +1322,16 @@ def retry_read(src, reqlen=CHUNK_SIZE):
     return chunk
   
 def copy_stream(src, dst, cfg, htmlize=0):
+  nch = 0
   while 1:
     chunk = retry_read(src)
     if not chunk:
       break
+    nch = nch+1
     if htmlize:
       chunk = htmlify(chunk, mangle_email_addrs=0)
     dst.write(chunk)
+  return nch
 
 class MarkupPipeWrapper:
   """An EZT callback that outputs a filepointer, plus some optional
@@ -3518,6 +3523,16 @@ def prev_rev(rev):
     r = r[:-2]
   return string.join(r, '.')
 
+def rev_cmp(rev1, rev2):
+  """Compares two revision numbers rev1 and rev2"""
+  r1 = string.split(str(rev1), '.')
+  r2 = string.split(str(rev2), '.')
+  l = max(map(lambda s: len(s), r1 + r2))
+  f = '%%0%ds' % (l)
+  rev1 = '.'.join(map(lambda s: f % (s), r1))
+  rev2 = '.'.join(map(lambda s: f % (s), r2))
+  return cmp(rev1, rev2)
+
 def build_commit(request, files, max_files, dir_strip, format):
   """Return a commit object build from the information in FILES, or
   None if no allowed files are present in the set.  DIR_STRIP is the
@@ -3655,7 +3670,8 @@ def build_commit(request, files, max_files, dir_strip, format):
                               view_href=view_href,
                               download_href=download_href,
                               prefer_markup=prefer_markup,
-                              diff_href=diff_href))
+                              diff_href=diff_href,
+                              root=my_repos))
 
   # No files survived authz checks?  Let's just pretend this
   # little commit didn't happen, shall we?
@@ -3716,6 +3732,96 @@ def query_backout(request, commits):
         print 'svn merge -r %s:%s %s/%s' \
               % (fileinfo.rev, prev_rev(fileinfo.rev),
                  fileinfo.dir, fileinfo.file)
+
+def query_is_unsecure_patch(request, commits):
+  if not commits:
+    return None
+  mr = {}
+  for commit in commits:
+    for fileinfo in commit.files:
+      fn = _path_join([fileinfo.dir, fileinfo.file])
+      if mr.get(fn, '') and rev_cmp(prev_rev(mr[fn]), fileinfo.rev) > 0:
+        return True
+      mr[fn] = fileinfo.rev;
+  return None
+
+def query_patch(request, commits):
+  request.server.header('text/x-diff')
+  if not commits:
+    print '# No changes were selected by the query.'
+    print '# There is nothing to show in the patch.'
+    return
+  files = {}
+  rev = ''
+  for commit in commits:
+    for fileinfo in commit.files:
+      fn = _path_join([fileinfo.dir, fileinfo.file])
+      rev = files.get(fn, '')
+      if not rev:
+        files[fn] = [ fileinfo.rev, fileinfo.rev, fileinfo.root ]
+      elif rev_cmp(rev[0], fileinfo.rev) > 0:
+        files[fn] = [ fileinfo.rev, rev[1], rev[2] ]
+  server_fp = get_writeready_server_file(request, 'text/plain')
+  for file in files.keys():
+    rev1 = prev_rev(files[file][0])
+    rev2 = files[file][1]
+    repos = files[file][2]['repos']
+    roottype = files[file][2]['roottype']
+    if roottype == 'svn':
+      try:
+        rev1 = repos._getrev(rev1)
+        rev2 = repos._getrev(rev2)
+      except vclib.InvalidRevision:
+        raise debug.ViewVCException('Invalid revision(s) passed to diff',
+                                    '400 Bad Request')
+    server_fp.write('Index: %s\n===================================================================\n' % (file))
+    try:
+      rdate1, _, _, _ = repos.revinfo(rev1)
+      rdate2, _, _, _ = repos.revinfo(rev2)
+      rdate1 = datetime.date.fromtimestamp(rdate1).strftime(' %Y/%m/%d %H:%M:%S')
+      rdate2 = datetime.date.fromtimestamp(rdate2).strftime(' %Y/%m/%d %H:%M:%S')
+    except vclib.UnsupportedFeature:
+      rdate1 = ''
+      rdate2 = ''
+    try:
+      if roottype == 'svn':
+        p2 = _path_parts(repos.get_location(file, rev2, rev2))
+      else:
+        p2 = _path_parts(file)
+        repos.itemtype(p2, rev2)
+    except vclib.ItemNotFound:
+      # file removed at rev2
+      if roottype == 'svn':
+        rev1, p1 = repos.last_rev(file, rev1, rev1)
+      else:
+        p1 = _path_parts(file)
+      server_fp.write('--- %s%s\t%s\n' % (file, rdate1, rev1))
+      server_fp.write('+++ %s%s\t%s\n' % ('/dev/null', rdate2, rev2))
+      continue
+    if roottype == 'svn':
+      rev1, p1 = repos.last_rev(file, rev2, rev1)
+    else:
+      p1 = _path_parts(file)
+      repos.itemtype(p1, rev1)
+    if rev_cmp(rev1, rev2) < 0:
+      # file changed and/or moved at rev2
+      if roottype == 'svn':
+        p1 = _path_parts(repos.get_location(p1, rev1, rev1))
+      else:
+        p1 = _path_parts(file)
+      try:
+        fp = repos.rawdiff(p1, rev1, p2, rev2, vclib.UNIFIED)
+        nc = copy_stream(fp, server_fp, request.cfg)
+        if not nc and _path_join(p1) != _path_join(p2):
+          server_fp.write('--- %s%s\t%s\n' % (_path_join(p1), rdate1, rev1))
+          server_fp.write('+++ %s%s\t%s\n' % (_path_join(p2), rdate2, rev2))
+        fp.close()
+      except:
+        pass
+    else:
+      # file added at rev2
+      server_fp.write('--- %s%s\t%s\n' % ('/dev/null', rdate1, rev1))
+      server_fp.write('+++ %s%s\t%s\n' % (file, rdate2, rev2))
 
 def view_query(request):
   if not is_query_supported(request):
@@ -3890,6 +3996,12 @@ def view_query(request):
   backout_href = request.get_url(params=params,
                                  escape=1)
 
+  # patch link
+  params = request.query_dict.copy()
+  params['format'] = 'patch'
+  patch_href = request.get_url(params=params,
+                                 escape=1)
+
   # link to zero limit_changes value
   params = request.query_dict.copy()
   params['limit_changes'] = 0
@@ -3904,12 +4016,18 @@ def view_query(request):
     query_backout(request, commits)
     return
 
+  if format == 'patch':
+    query_patch(request, commits)
+    return
+
   data = common_template_data(request)
   data.update({
     'sql': sql,
     'english_query': english_query(request),
     'queryform_href': request.get_url(view_func=view_queryform, escape=1),
     'backout_href': backout_href,
+    'patch_href' : patch_href,
+    'patch_unsecure' : ezt.boolean(query_is_unsecure_patch(request, commits)),
     'plus_count': plus_count,
     'minus_count': minus_count,
     'show_branch': show_branch,

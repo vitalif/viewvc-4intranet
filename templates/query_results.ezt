@@ -9,6 +9,10 @@
 [# <!-- {sql} --> ]
 <p><a href="[queryform_href]">Modify query</a></p>
 <p><a href="[backout_href]">Show commands which could be used to back out these changes</a></p>
+<p>
+    <a href="[patch_href]">Show a patch built from these changes</a>
+    [if-any patch_unsecure]<br /><b>CAUTION: selected changes are not contiguous, patch may include differences from other commits.</b>[end]
+</p>
 
 <p><strong>+[plus_count]/-[minus_count]</strong> changed lines total.</p>
 
