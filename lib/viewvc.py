@@ -3800,8 +3800,11 @@ def query_patch(request, commits):
       pr = prev_rev(str(rev2))
     try:
       if roottype == 'svn':
-        rev1, p1 = repos.last_rev(file, pr, rev1)
-        p1 = _path_parts(repos.get_location(p1, rev1, rev1))
+        trev1, p1 = repos.last_rev(file, pr, rev1)
+        if trev1 != rev1:
+          p1 = None
+        else:
+          p1 = _path_parts(repos.get_location(p1, rev1, rev1))
       else:
         p1 = _path_parts(file)
         fd, fr = repos.openfile(p1, rev1)

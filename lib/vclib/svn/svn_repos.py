@@ -649,8 +649,7 @@ class LocalSubversionRepository(vclib.Repository):
     return cached_info[0], cached_info[1], cached_info[2], cached_info[3]
   
   def rawdiff(self, path_parts1, rev1, path_parts2, rev2, type, options={}):
-
-    if path_parts1 is not None:
+    if path_parts1:
       p1 = self._getpath(path_parts1)
       r1 = self._getrev(rev1)
       if not vclib.check_path_access(self, path_parts1, vclib.FILE, rev1):
@@ -658,14 +657,14 @@ class LocalSubversionRepository(vclib.Repository):
     else:
       p1 = None
 
-    if path_parts2 is not None:
-      if not p1:
-        raise vclib.ItemNotFound(parh_parts2)
+    if path_parts2:
       p2 = self._getpath(path_parts2)
       r2 = self._getrev(rev2)
       if not vclib.check_path_access(self, path_parts2, vclib.FILE, rev2):
         raise vclib.ItemNotFound(path_parts2)
     else:
+      if not p1:
+        raise vclib.ItemNotFound(path_parts2)
       p2 = None
 
     args = vclib._diff_args(type, options)
