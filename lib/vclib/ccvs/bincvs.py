@@ -338,13 +338,19 @@ class BinCVSRepository(BaseCVSRepository):
 
       ignore_keyword_subst - boolean, ignore keyword substitution
     """
+    if not path_parts1:
+      path_parts1 = path_parts2
+      rev1 = '1.0'
+    if not path_parts2:
+      path_parts2 = path_parts1
+      rev2 = '1.0'
     if self.itemtype(path_parts1, rev1) != vclib.FILE:  # does auth-check
       raise vclib.Error("Path '%s' is not a file."
                         % (string.join(path_parts1, "/")))
     if self.itemtype(path_parts2, rev2) != vclib.FILE:  # does auth-check
       raise vclib.Error("Path '%s' is not a file."
                         % (string.join(path_parts2, "/")))
-    
+
     args = vclib._diff_args(type, options)
     if options.get('ignore_keyword_subst', 0):
       args.append('-kk')
@@ -352,7 +358,7 @@ class BinCVSRepository(BaseCVSRepository):
     rcsfile = self.rcsfile(path_parts1, 1)
     if path_parts1 != path_parts2:
       raise NotImplementedError, "cannot diff across paths in cvs"
-    args.extend(['-r' + rev1, '-r' + rev2, rcsfile])
+    args.extend(['-N', '-r' + rev1, '-r' + rev2, rcsfile])
     fp = self.rcs_popen('rcsdiff', args, 'rt')
 
     # Eat up the non-GNU-diff-y headers.
@@ -361,7 +367,6 @@ class BinCVSRepository(BaseCVSRepository):
       if not line or line[0:5] == 'diff ':
         break
     return fp
-  
 
 class CVSDirEntry(vclib.DirEntry):
   def __init__(self, name, kind, errors, in_attic, absent=0):

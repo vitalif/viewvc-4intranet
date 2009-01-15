@@ -381,13 +381,13 @@ class _diff_fp:
         self.fp = None
     finally:
       try:
-        if self.temp1:
+        if self.temp1 and self.temp1 != '/dev/null':
           os.remove(self.temp1)
-          self.temp1 = None
+        self.temp1 = None
       finally:
-        if self.temp2:
+        if self.temp2 and self.temp2 != '/dev/null':
           os.remove(self.temp2)
-          self.temp2 = None
+        self.temp2 = None
 
   def __del__(self):
     self.close()

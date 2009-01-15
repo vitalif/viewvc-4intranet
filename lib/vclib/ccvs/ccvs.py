@@ -121,23 +121,32 @@ class CCVSRepository(BaseCVSRepository):
     return filtered_revs
 
   def rawdiff(self, path_parts1, rev1, path_parts2, rev2, type, options={}):
-    if self.itemtype(path_parts1, rev1) != vclib.FILE:  # does auth-check
+    if path_parts1 and self.itemtype(path_parts1, rev1) != vclib.FILE:  # does auth-check
       raise vclib.Error("Path '%s' is not a file."
                         % (string.join(path_parts1, "/")))
-    if self.itemtype(path_parts2, rev2) != vclib.FILE:  # does auth-check
+    if path_parts2 and self.itemtype(path_parts2, rev2) != vclib.FILE:  # does auth-check
       raise vclib.Error("Path '%s' is not a file."
                         % (string.join(path_parts2, "/")))
-    
-    temp1 = tempfile.mktemp()
-    open(temp1, 'wb').write(self.openfile(path_parts1, rev1)[0].getvalue())
-    temp2 = tempfile.mktemp()
-    open(temp2, 'wb').write(self.openfile(path_parts2, rev2)[0].getvalue())
+    if not path_parts1 and not path_parts2:
+      raise vclib.Error("Nothing to diff.")
 
-    r1 = self.itemlog(path_parts1, rev1, vclib.SORTBY_DEFAULT, 0, 0, {})[-1]
-    r2 = self.itemlog(path_parts2, rev2, vclib.SORTBY_DEFAULT, 0, 0, {})[-1]
+    if path_parts1:
+      temp1 = tempfile.mktemp()
+      open(temp1, 'wb').write(self.openfile(path_parts1, rev1)[0].getvalue())
+      r1 = self.itemlog(path_parts1, rev1, vclib.SORTBY_DEFAULT, 0, 0, {})[-1]
+      info1 = (self.rcsfile(path_parts1, root=1, v=0), r1.date, r1.string)
+    else:
+      temp1 = '/dev/null'
+      info1 = ('/dev/null', '', '')
 
-    info1 = (self.rcsfile(path_parts1, root=1, v=0), r1.date, r1.string)
-    info2 = (self.rcsfile(path_parts2, root=1, v=0), r2.date, r2.string)
+    if path_parts2:
+      temp2 = tempfile.mktemp()
+      open(temp2, 'wb').write(self.openfile(path_parts2, rev2)[0].getvalue())
+      r2 = self.itemlog(path_parts2, rev2, vclib.SORTBY_DEFAULT, 0, 0, {})[-1]
+      info2 = (self.rcsfile(path_parts2, root=1, v=0), r2.date, r2.string)
+    else:
+      temp2 = '/dev/null'
+      info2 = ('/dev/null', '', '')
 
     diff_args = vclib._diff_args(type, options)
 

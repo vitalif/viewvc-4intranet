@@ -3783,51 +3783,47 @@ def query_patch(request, commits):
     except vclib.UnsupportedFeature:
       rdate1 = ''
       rdate2 = ''
+    pr = rev2
     try:
       if roottype == 'svn':
         p2 = _path_parts(repos.get_location(file, rev2, rev2))
       else:
         p2 = _path_parts(file)
         fd, fr = repos.openfile(p2, rev2)
+        if not fd or rev2 != fr:
+          raise vclib.ItemNotFound(p2)
         if fd:
           fd.close()
-          rev2 = fr
     except vclib.ItemNotFound:
       # file removed at rev2
+      p2 = None
+      pr = prev_rev(str(rev2))
+    try:
       if roottype == 'svn':
-        rev1, p1 = repos.last_rev(file, rev1, rev1)
-      else:
-        p1 = _path_parts(file)
-      server_fp.write('--- %s%s\t%s\n' % (file, rdate1, rev1))
-      server_fp.write('+++ %s%s\t%s\n' % ('/dev/null', rdate2, rev2))
-      continue
-    if roottype == 'svn':
-      rev1, p1 = repos.last_rev(file, rev2, rev1)
-    else:
-      p1 = _path_parts(file)
-      fd, fr = repos.openfile(p1, rev1)
-      if fd:
-        fd.close()
-        rev1 = fr
-    if rev_cmp(rev1, rev2) < 0:
-      # file changed and/or moved at rev2
-      if roottype == 'svn':
+        rev1, p1 = repos.last_rev(file, pr, rev1)
         p1 = _path_parts(repos.get_location(p1, rev1, rev1))
       else:
         p1 = _path_parts(file)
-      try:
-        fp = repos.rawdiff(p1, rev1, p2, rev2, vclib.UNIFIED)
-        nc = copy_stream(fp, server_fp, request.cfg)
-        if not nc and _path_join(p1) != _path_join(p2):
-          server_fp.write('--- %s%s\t%s\n' % (_path_join(p1), rdate1, rev1))
-          server_fp.write('+++ %s%s\t%s\n' % (_path_join(p2), rdate2, rev2))
-        fp.close()
-      except:
-        pass
-    else:
-      # file added at rev2
-      server_fp.write('--- %s%s\t%s\n' % ('/dev/null', rdate1, rev1))
-      server_fp.write('+++ %s%s\t%s\n' % (file, rdate2, rev2))
+        fd, fr = repos.openfile(p1, rev1)
+        if fd:
+          fd.close()
+          rev1 = fr
+        else:
+          rev1 = '0'
+      if rev_cmp(rev1, rev2) >= 0:
+        # file added at rev2
+        p1 = None
+    except:
+      p1 = None
+    try:
+      fp = repos.rawdiff(p1, rev1, p2, rev2, vclib.UNIFIED)
+      nc = copy_stream(fp, server_fp, request.cfg)
+      if not nc and p1 and p2 and _path_join(p1) != _path_join(p2):
+        server_fp.write('--- %s%s\t%s\n' % (_path_join(p1), rdate1, rev1))
+        server_fp.write('+++ %s%s\t%s\n' % (_path_join(p2), rdate2, rev2))
+      fp.close()
+    except:
+      pass
 
 def view_query(request):
   if not is_query_supported(request):
