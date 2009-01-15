@@ -3788,7 +3788,10 @@ def query_patch(request, commits):
         p2 = _path_parts(repos.get_location(file, rev2, rev2))
       else:
         p2 = _path_parts(file)
-        repos.itemtype(p2, rev2)
+        fd, fr = repos.openfile(p2, rev2)
+        if fd:
+          fd.close()
+          rev2 = fr
     except vclib.ItemNotFound:
       # file removed at rev2
       if roottype == 'svn':
@@ -3802,7 +3805,10 @@ def query_patch(request, commits):
       rev1, p1 = repos.last_rev(file, rev2, rev1)
     else:
       p1 = _path_parts(file)
-      repos.itemtype(p1, rev1)
+      fd, fr = repos.openfile(p1, rev1)
+      if fd:
+        fd.close()
+        rev1 = fr
     if rev_cmp(rev1, rev2) < 0:
       # file changed and/or moved at rev2
       if roottype == 'svn':
