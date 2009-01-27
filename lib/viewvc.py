@@ -3737,12 +3737,20 @@ def query_is_unsecure_patch(request, commits):
   if not commits:
     return None
   mr = {}
+  lr = {}
   for commit in commits:
     for fileinfo in commit.files:
       fn = _path_join([fileinfo.dir, fileinfo.file])
-      if mr.get(fn, '') and rev_cmp(prev_rev(mr[fn]), fileinfo.rev) > 0:
-        return True
-      mr[fn] = fileinfo.rev;
+      if mr.get(fn, ''):
+        pr = mr[fn]
+        if fileinfo.root['roottype'] == 'svn':
+          pr = lr[fileinfo.root['rootname']]
+        pr = prev_rev(pr)
+        if rev_cmp(pr, fileinfo.rev) > 0:
+          return True
+      if fileinfo.root['roottype'] == 'svn':
+        lr[fileinfo.root['rootname']] = fileinfo.rev
+      mr[fn] = fileinfo.rev
   return None
 
 def query_patch(request, commits):
