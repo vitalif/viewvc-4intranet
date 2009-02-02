@@ -711,6 +711,7 @@ _legal_params = {
   # for query
   'repos'         : _validate_regex,
   'repos_match'   : _re_validate_alpha,
+  'repos_type'    : None,
   'branch'        : _validate_regex,
   'branch_match'  : _re_validate_alpha,
   'dir'           : None,
@@ -3400,6 +3401,7 @@ def view_queryform(request):
   # default values ...
   data['repos'] = request.query_dict.get('repos', '')
   data['repos_match'] = request.query_dict.get('repos_match', 'exact')
+  data['repos_type'] = request.query_dict.get('repos_type', '')
   if not data['repos']:
     data['repos'] = request.rootpath
     data['repos_match'] = 'exact'
@@ -3847,6 +3849,7 @@ def view_query(request):
   # get form data
   repos_root = request.query_dict.get('repos', '')
   repos_match = request.query_dict.get('repos_match', 'exact')
+  repos_type = request.query_dict.get('repos_type', '')
   branch = request.query_dict.get('branch', '')
   branch_match = request.query_dict.get('branch_match', 'exact')
   dir = request.query_dict.get('dir', '')
@@ -3893,6 +3896,15 @@ def view_query(request):
   query = cvsdb.CreateCheckinQuery()
   if repos_root:
     query.SetRepository(repos_root, repos_match)
+  elif repos_type == 'cvs' or repos_type == 'svn':
+    # select only CVS/SVN repositories
+    all = list_roots(request)
+    re = []
+    for r in all.keys():
+      if all[r][1] == repos_type:
+        re.append('^'+all[r][0]+'$')
+    re = '|'.join(re)
+    query.SetRepository(re, 'regex')
   # treat "HEAD" specially ...
   if branch_match == 'exact' and branch == 'HEAD':
     query.SetBranch('')

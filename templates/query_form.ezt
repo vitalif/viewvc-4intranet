@@ -17,7 +17,13 @@ Browse Directory</a></p>
   <tr>
     <th style="text-align:right;vertical-align:top;">Repository:</th>
     <td>
-      <input type="text" name="repos" value="[repos]" /><br />
+      <input type="text" name="repos" value="[repos]" /> &nbsp; <b>Repository type:</b> &nbsp;
+      <select name="repos_type">
+        <option value="">Any</option>
+        <option value="cvs" [is repos_type "cvs"]selected[end]>CVS</option>
+        <option value="svn" [is repos_type "svn"]selected[end]>Subversion</option>
+      </select>
+      <br />
       <label for="repos_match_exact">
         <input type="radio" name="repos_match" id="repos_match_exact"
            value="exact" [is repos_match "exact"]checked="checked"[end] />
