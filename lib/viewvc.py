@@ -3848,6 +3848,7 @@ def view_query(request):
 
   # get form data
   repos_root = request.query_dict.get('repos', '')
+  repos_root_t = repos_root
   repos_match = request.query_dict.get('repos_match', 'exact')
   repos_type = request.query_dict.get('repos_type', '')
   branch = request.query_dict.get('branch', '')
@@ -4018,14 +4019,21 @@ def view_query(request):
   # backout link
   params = request.query_dict.copy()
   params['format'] = 'backout'
-  backout_href = request.get_url(params=params,
-                                 escape=1)
+  backout_href = request.get_url(params=params, escape=1)
 
   # patch link
   params = request.query_dict.copy()
   params['format'] = 'patch'
-  patch_href = request.get_url(params=params,
-                                 escape=1)
+  patch_href = request.get_url(params=params, escape=1)
+
+  # look only in... links
+  params = request.query_dict.copy()
+  params['repos_type'] = 'cvs'
+  lookcvs_href = request.get_url(params=params, escape=1)
+  params['repos_type'] = 'svn'
+  looksvn_href = request.get_url(params=params, escape=1)
+  params['repos_type'] = ''
+  lookall_href = request.get_url(params=params, escape=1)
 
   # link to zero limit_changes value
   params = request.query_dict.copy()
@@ -4048,11 +4056,16 @@ def view_query(request):
   data = common_template_data(request)
   data.update({
     'sql': sql,
+    'repos_root': repos_root_t,
+    'repos_type': repos_type,
     'english_query': english_query(request),
     'queryform_href': request.get_url(view_func=view_queryform, escape=1),
+    'querycvs_href': lookcvs_href,
+    'querysvn_href': looksvn_href,
+    'queryall_href': lookall_href,
     'backout_href': backout_href,
-    'patch_href' : patch_href,
-    'patch_unsecure' : ezt.boolean(query_is_unsecure_patch(request, commits)),
+    'patch_href': patch_href,
+    'patch_unsecure': ezt.boolean(query_is_unsecure_patch(request, commits)),
     'plus_count': plus_count,
     'minus_count': minus_count,
     'show_branch': show_branch,

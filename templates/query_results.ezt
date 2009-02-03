@@ -7,7 +7,14 @@
 
 <p><strong>[english_query]</strong></p>
 [# <!-- {sql} --> ]
-<p><a href="[queryform_href]">Modify query</a></p>
+<p><a href="[queryform_href]">Modify query</a>[if-any repos_root] [else]
+    [if-any repos_type]
+    [is repos_type "cvs"]| <a href="[querysvn_href]">Look only in SVN</a> | <a href="[queryall_href]">Look in all repos</a> [end]
+    [is repos_type "svn"]| <a href="[querycvs_href]">Look only in CVS</a> | <a href="[queryall_href]">Look in all repos</a> [end]
+    [else]
+    | <a href="[querysvn_href]">Look only in SVN</a> | <a href="[querycvs_href]">Look only in CVS</a>
+    [end]
+[end]</p>
 <p><a href="[backout_href]">Show commands which could be used to back out these changes</a></p>
 <p>
     <a href="[patch_href]">Show a patch built from these changes</a>
