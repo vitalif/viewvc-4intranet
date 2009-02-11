@@ -22,6 +22,7 @@ import fnmatch
 import vclib
 import vclib.ccvs
 import vclib.svn
+import cvsdb
 
 #########################################################################
 #
@@ -64,6 +65,7 @@ class Config:
     if rootname:
       self._process_root_options(self.parser, rootname)
     self.expand_root_parents()
+    cvsdb.setencs(self.options.encodings.split(':'))
 
   def expand_root_parents(self):
     """Expand the configured root parents into individual roots."""
@@ -280,6 +282,7 @@ class Config:
     self.options.limit_changes = 100
     self.options.cvs_ondisk_charset = 'cp1251'
     self.options.binary_mime_re = '^(?!text/|.*\Wxml)'
+    self.options.encodings = 'utf-8:cp1251:iso-8859-1'
 
     self.templates.diff = None
     self.templates.directory = None

@@ -29,15 +29,19 @@ error = "cvsdb error"
 ## defined to actually be complete; it should run well off of any DBI 2.0
 ## complient database interface
 
+encs = [ "utf-8", "cp1251", "iso-8859-1" ]
+
 def utf8string(value):
-    try: value = value.decode("utf-8")
-    except:
-        try: value = value.decode("cp1251")
-        except:
-            try: value = value.decode("iso-8859-1")
-            except: 1
-    value = value.encode("utf-8")
-    return value
+    for e in encs:
+        try:
+            value = value.decode(e)
+            break
+        except: pass
+    return value.encode("utf-8")
+
+def setencs(e):
+    global encs
+    encs = e
 
 class CheckinDatabase:
     def __init__(self, host, port, socket, user, passwd, database, row_limit, min_relevance, authorizer = None):
