@@ -220,6 +220,7 @@ class Config:
         if section == root_authz_section:
           for key, value in self._get_parser_items(self.parser, section):
             params[key] = value
+    params['__config'] = self
     return params
   
   def set_defaults(self):
