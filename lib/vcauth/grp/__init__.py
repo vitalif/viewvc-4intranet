@@ -33,7 +33,7 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
       if i.find(':') < 0:
         continue
       (root, auth) = i.split(':', 2)
-      self.byroot[root] = auth
+      self.byroot[root.strip()] = auth.strip()
 
   def check_root_access(self, rootname):
     r = self.cached.get(rootname, None)
@@ -42,7 +42,10 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
     try:
       grent = self.grp.get(rootname, None)
       if grent is None:
-        grent = grp.getgrnam(self.byroot.get(rootname, self.fmt) % re.sub('\W+', '', rootname))
+        grn = self.byroot.get(rootname, self.fmt)
+	if grn.find('%s') >= 0:
+	  grn = grn % re.sub('[^\w\.\-]+', '', rootname)
+	grent = grp.getgrnam(grn)
         self.grp[rootname] = grent
       if grent.gr_mem and len(grent.gr_mem) and self.username in grent.gr_mem:
         r = 1

@@ -30,7 +30,7 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
       if i.find(':') < 0:
         continue
       (root, auth) = i.split(':', 2)
-      self.byroot[root] = auth
+      self.byroot[root.strip()] = auth.strip()
 
   def create_authz(self, rootname):
     aname = self.byroot.get(rootname, '') or self.default
@@ -47,7 +47,7 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
       except ImportError:
         raise debug.ViewVCException(
           'Invalid authorizer (%s) specified for root "%s"' \
-          % (cfg.options.authorizer, rootname),
+          % (self.cfg.options.authorizer, rootname),
           '500 Internal Server Error')
     finally:
       if fp:
