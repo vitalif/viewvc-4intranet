@@ -24,16 +24,16 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
     self.username = username
     self.params = params
     self.cfg = params['__config']
-    self.fmt = params.get('group_name_format', 'svn.%s.ro')
     self.cached = {}
     self.grp = {}
     self.byroot = {}
+    self.fmt = map(lambda l: l.strip(), params.get('group_name_format', 'svn.%s.ro').split('|'))
     byr = params.get('by_root', '')
     for i in byr.split(','):
       if i.find(':') < 0:
         continue
       (root, auth) = i.split(':', 2)
-      self.byroot[root.strip()] = auth.strip()
+      self.byroot[root.strip()] = map(lambda l: l.strip(), auth.split('|'))
 
   def check_root_access(self, rootname):
     r = self.cached.get(rootname, None)
@@ -42,13 +42,12 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
     try:
       grent = self.grp.get(rootname, None)
       if grent is None:
-        grn = self.byroot.get(rootname, self.fmt)
-	if grn.find('%s') >= 0:
-	  grn = grn % re.sub('[^\w\.\-]+', '', rootname)
-	grent = grp.getgrnam(grn)
+        grent = map(lambda grn: grp.getgrnam(grn.replace('%s', re.sub('[^\w\.\-]+', '', rootname))), self.byroot.get(rootname, self.fmt))
         self.grp[rootname] = grent
-      if grent.gr_mem and len(grent.gr_mem) and self.username in grent.gr_mem:
-        r = 1
+      for i in grent:
+        if i.gr_mem and len(i.gr_mem) and self.username in i.gr_mem:
+          r = 1
+          break
     except:
       r = 0
     self.cached[rootname] = r
