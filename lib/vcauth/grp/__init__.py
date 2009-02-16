@@ -27,7 +27,7 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
     self.cached = {}
     self.grp = {}
     self.byroot = {}
-    self.fmt = map(lambda l: l.strip(), params.get('group_name_format', 'svn.%s.ro').split('|'))
+    self.fmt = map(lambda l: l.strip(), params.get('group_name_format', 'svn.%s|svn.%s.ro').split('|'))
     byr = params.get('by_root', '')
     for i in byr.split(','):
       if i.find(':') < 0:
