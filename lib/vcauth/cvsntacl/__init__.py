@@ -95,5 +95,6 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
       return 1
     if pathtype == vclib.DIR:
       return self.check(rootname, path_parts, '')
-    f = path_parts.pop()
+    f = path_parts[-1]
+    path_parts = path_parts[:-1]
     return self.check(rootname, path_parts, f)
