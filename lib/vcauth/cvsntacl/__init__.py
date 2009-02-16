@@ -26,6 +26,7 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
     self.cfg = params['__config']
     self.default = params.get('default', 0)
     self.cached = {}
+    self.xmlcache = {}
 
   def checkr(self, element, paths):
     r = None
@@ -57,9 +58,12 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
         xml = xml + '/CVS/fileattr.xml'
         if self.cached.get(xml, None) is not None:
           return self.cached.get(xml, None)
-        fp = open(xml, 'rb')
-        doc = Sax2.Reader().fromStream(fp)
-        fp.close()
+	doc = self.xmlcache.get(xml, None)
+	if doc is None:
+          fp = open(xml, 'rb')
+          doc = Sax2.Reader().fromStream(fp)
+          fp.close()
+	  self.xmlcache[xml] = doc
         if filename:
           r = self.checkr(doc.documentElement, [
             '/fileattr/file[@name=\'%s\']/acl[@user=\'%s\' and not(@branch)]/read' % (filename, self.username),
@@ -78,10 +82,9 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
         raise Exception(None)
       except:
         if len(path_parts) > 0:
-          path_parts.pop()
+          path_parts = path_parts[:-1]
         filename = ''
         i = i-1
-        continue
     return self.default
 
   def check_root_access(self, rootname):
