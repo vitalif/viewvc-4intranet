@@ -3571,12 +3571,6 @@ def build_commit(request, files, max_files, dir_strip, format):
       commit_time = make_time_string(commit_time, cfg)
     change_type = f.GetTypeString()
 
-    # In CVS, we can actually look at deleted revisions; in Subversion
-    # we can't -- we'll look at the previous revision instead.
-    exam_rev = rev
-    if request.roottype == 'svn' and change_type == 'Remove':
-      exam_rev = rev_prev
-
     # Check path access (since the commits database logic bypasses the
     # vclib layer and, thus, the vcauth stuff that layer uses).
     if request.roottype == 'cvs':
@@ -3590,6 +3584,13 @@ def build_commit(request, files, max_files, dir_strip, format):
       my_repos = all_repos[f.GetRepository()] = request.create_repos(f.GetRepository())
     if not my_repos:
       raise vclib.ItemNotFound(path_parts)
+
+    # In CVS, we can actually look at deleted revisions; in Subversion
+    # we can't -- we'll look at the previous revision instead.
+    exam_rev = rev
+    if my_repos['roottype'] == 'svn' and change_type == 'Remove':
+      exam_rev = rev_prev
+
     if path_parts:
       # Skip files in CVSROOT if asked to hide such.
       if cfg.options.hide_cvsroot \
