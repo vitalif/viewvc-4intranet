@@ -3573,17 +3573,17 @@ def build_commit(request, files, max_files, dir_strip, format):
 
     # Check path access (since the commits database logic bypasses the
     # vclib layer and, thus, the vcauth stuff that layer uses).
-    if request.roottype == 'cvs':
+    my_repos = all_repos.get(f.GetRepository(), '')
+    if not my_repos:
+      my_repos = all_repos[f.GetRepository()] = request.create_repos(f.GetRepository())
+    if not my_repos:
+      raise vclib.ItemNotFound(where)
+    if my_repos['roottype'] == 'cvs':
       try: where = unicode(where,'utf-8')
       except: pass
       try: where = where.encode(cfg.options.cvs_ondisk_charset)
       except: pass
     path_parts = _path_parts(where)
-    my_repos = all_repos.get(f.GetRepository(), '')
-    if not my_repos:
-      my_repos = all_repos[f.GetRepository()] = request.create_repos(f.GetRepository())
-    if not my_repos:
-      raise vclib.ItemNotFound(path_parts)
 
     # In CVS, we can actually look at deleted revisions; in Subversion
     # we can't -- we'll look at the previous revision instead.
@@ -3594,7 +3594,7 @@ def build_commit(request, files, max_files, dir_strip, format):
     if path_parts:
       # Skip files in CVSROOT if asked to hide such.
       if cfg.options.hide_cvsroot \
-         and is_cvsroot_path(request.roottype, path_parts):
+         and is_cvsroot_path(my_repos['roottype'], path_parts):
         found_unreadable = 1
         continue
 
@@ -3616,7 +3616,7 @@ def build_commit(request, files, max_files, dir_strip, format):
         found_unreadable = 1
         continue
 
-    if request.roottype == 'svn':
+    if my_repos['roottype'] == 'svn':
       params = { 'pathrev': exam_rev }
     else:
       params = { 'revision': exam_rev, 'pathrev': f.GetBranch() or None }  
@@ -3700,7 +3700,7 @@ def build_commit(request, files, max_files, dir_strip, format):
     commit.short_log = format_log(desc, cfg, format != 'rss')
   commit.author = request.server.escape(author)
   commit.rss_date = make_rss_time_string(date, request.cfg)
-  if request.roottype == 'svn':
+  if my_repos['roottype'] == 'svn':
     commit.rev = commit_rev
     commit.rss_url = '%s://%s%s' % \
       (request.server.getenv("HTTPS") == "on" and "https" or "http",
