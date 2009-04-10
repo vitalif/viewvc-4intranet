@@ -4027,6 +4027,11 @@ def view_query(request):
   params['format'] = 'patch'
   patch_href = request.get_url(params=params, escape=1)
 
+  # rss link
+  params = request.query_dict.copy()
+  params['format'] = 'rss'
+  rss_href = request.get_url(params=params, escape=1)
+
   # look only in... links
   params = request.query_dict.copy()
   params['repos_type'] = 'cvs'
@@ -4066,6 +4071,7 @@ def view_query(request):
     'queryall_href': lookall_href,
     'backout_href': backout_href,
     'patch_href': patch_href,
+    'rss_href': rss_href,
     'patch_unsecure': ezt.boolean(query_is_unsecure_patch(request, commits)),
     'plus_count': plus_count,
     'minus_count': minus_count,
