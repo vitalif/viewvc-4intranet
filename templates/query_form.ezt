@@ -109,6 +109,13 @@ Browse Directory</a></p>
     </td>
   </tr>
   <tr>
+    <th style="text-align:right;vertical-align:top;">Revision number:</th>
+    <td>
+      <input type="text" name="query_revision" value="[query_revision]" /><br />
+      (you can list multiple revision numbers separated by commas)
+    </td>
+  </tr>
+  <tr>
     <th style="text-align:right;vertical-align:top;">Who:</th>
     <td>
       <input type="text" name="who" value="[who]" /><br />

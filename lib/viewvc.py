@@ -717,6 +717,7 @@ _legal_params = {
   'dir'           : None,
   'file'          : _validate_regex,
   'file_match'    : _re_validate_alpha,
+  'query_revision': None,
   'who'           : _validate_regex,
   'who_match'     : _re_validate_alpha,
   'comment'       : _validate_regex,
@@ -3410,6 +3411,7 @@ def view_queryform(request):
   data['dir'] = request.query_dict.get('dir', '')
   data['file'] = request.query_dict.get('file', '')
   data['file_match'] = request.query_dict.get('file_match', 'exact')
+  data['query_revision'] = request.query_dict.get('query_revision', '')
   data['who'] = request.query_dict.get('who', '')
   data['who_match'] = request.query_dict.get('who_match', 'exact')
   data['comment'] = request.query_dict.get('comment', '')
@@ -3857,6 +3859,7 @@ def view_query(request):
   dir = request.query_dict.get('dir', '')
   file = request.query_dict.get('file', '')
   file_match = request.query_dict.get('file_match', 'exact')
+  query_revision = request.query_dict.get('query_revision', '')
   who = request.query_dict.get('who', '')
   who_match = request.query_dict.get('who_match', 'exact')
   comment = request.query_dict.get('comment', '')
@@ -3925,6 +3928,8 @@ def view_query(request):
       query.SetDirectory('%s/%%' % cvsdb.EscapeLike(where), 'like')
   if file:
     query.SetFile(file, file_match)
+  if query_revision:
+    query.SetRevision(query_revision)
   if who:
     query.SetAuthor(who, who_match)
   if comment:

@@ -385,6 +385,9 @@ class CheckinDatabase:
             temp = self.SQLQueryListString("files.file", query.file_list)
             condList.append(temp)
             
+        if len(query.revision_list):
+            condList.append("(checkins.revision IN (" + ','.join(map(lambda s: self.db.literal(s), query.revision_list)) + "))")
+            
         if len(query.author_list):
             tableList.append(("people", "(checkins.whoid=people.id)"))
             temp = self.SQLQueryListString("people.who", query.author_list)
@@ -753,6 +756,7 @@ class CheckinDatabaseQuery:
         self.branch_list = []
         self.directory_list = []
         self.file_list = []
+        self.revision_list = []
         self.author_list = []
         self.comment_list = []
         self.text_query = ""
@@ -785,6 +789,11 @@ class CheckinDatabaseQuery:
 
     def SetFile(self, file, match = "exact"):
         self.file_list.append(QueryEntry(file, match))
+
+    def SetRevision(self, revision):
+        r = re.compile('\s*[,;]+\s*')
+        for i in r.split(revision):
+            self.revision_list.append(i)
 
     def SetAuthor(self, author, match = "exact"):
         self.author_list.append(QueryEntry(author, match))
