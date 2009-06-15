@@ -157,6 +157,7 @@ class SvnRev:
         svn.repos.svn_repos_replay(fsroot, e_ptr, e_baton)
 
         self.changes = []
+        changes_hash = {}
         for path, change in editor.changes.items():
             # skip non-file changes
             if change.item_kind != svn.core.svn_node_file:
@@ -180,6 +181,14 @@ class SvnRev:
                                       change.path and change.path or None)
             diff_fp = diffobj.get_pipe()
             plus, minus = _get_diff_counts(diff_fp)
+
+            # CustIS Bug 50473: a workaround for svnlib behaviour in file movements (FILE1 -> FILE2 + FILE1 -> null)
+            if change.base_path:
+                if not change.path and changes_hash.get(change.base_path, '') != '':
+                    minus = 0
+                elif change.path:
+                    changes_hash[change.base_path] = change.path
+
             self.changes.append((path, action, plus, minus))
 
     def _get_root_for_rev(self, rev):
