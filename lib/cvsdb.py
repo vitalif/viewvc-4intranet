@@ -470,7 +470,7 @@ class CheckinDatabase:
             condList.append(temp)
 
         if query.sort == "date":
-            order_by = "ORDER BY %s.ci_when DESC,descid"
+            order_by = "ORDER BY %s.ci_when DESC,descid" % (commits_table)
         elif query.sort == "author":
             tableList.append(("people", "(%s.whoid=people.id)" % (commits_table)))
             order_by = "ORDER BY people.who,descid"

@@ -3605,6 +3605,7 @@ def view_queryform(request):
     'dir' : request.query_dict.get('dir', ''),
     'file' : request.query_dict.get('file', ''),
     'file_match' : request.query_dict.get('file_match', 'exact'),
+    'query_revision' : request.query_dict.get('query_revision', ''),
     'who' : request.query_dict.get('who', ''),
     'who_match' : request.query_dict.get('who_match', 'exact'),
     'comment' : request.query_dict.get('comment', ''),
