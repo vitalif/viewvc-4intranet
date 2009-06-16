@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*-python-*-
 #
-# Copyright (C) 1999-2007 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -226,9 +226,16 @@ If this doesn't work, please click on the link above.
             save_stdout = sys.stdout
             save_stderr = sys.stderr
             # For external tools like enscript we also need to redirect
-            # the real stdout file descriptor. (On windows, reassigning the
-            # sys.stdout variable is sufficient because pipe_cmds makes it
-            # the standard output for child processes.)
+            # the real stdout file descriptor.
+            #
+            # FIXME:  This code used to carry the following comment:
+            #
+            #   (On windows, reassigning the sys.stdout variable is sufficient
+            #   because pipe_cmds makes it the standard output for child
+            #   processes.)
+            #
+            # But we no longer use pipe_cmds.  So at the very least, the
+            # comment is stale.  Is the code okay, though?
             if sys.platform != "win32": save_realstdout = os.dup(1) 
             try:
                 try:
@@ -375,7 +382,7 @@ def gui(host, port):
 
             # Early loading of configuration here.  Used to
             # allow tinkering with configuration settings through the gui:
-            handle_config()
+            handle_config(options.config_file)
             if not LIBRARY_DIR:
                 cfg.options.cvsgraph_conf = "../cgi/cvsgraph.conf.dist"
 
@@ -388,14 +395,6 @@ def gui(host, port):
                 text="enable cvsgraph (needs binary)", var=self.cvsgraph_ivar,
                 command=self.toggle_use_cvsgraph)
             self.cvsgraph_toggle.pack(side='top', anchor='w')
-
-            # enscript toggle:
-            self.enscript_ivar = Tkinter.IntVar()
-            self.enscript_ivar.set(cfg.options.use_enscript)
-            self.enscript_toggle = Tkinter.Checkbutton(self.options_frm,
-                text="enable enscript (needs binary)", var=self.enscript_ivar,
-                command=self.toggle_use_enscript)
-            self.enscript_toggle.pack(side='top', anchor='w')
 
             # show_subdir_lastmod toggle:
             self.subdirmod_ivar = Tkinter.IntVar()
@@ -422,16 +421,27 @@ def gui(host, port):
                 command=self.toggle_use_localtime)
             self.use_localtime_toggle.pack(side='top', anchor='w')
 
-            # use_pagesize integer var:
-            self.usepagesize_lbl = Tkinter.Label(self.options_frm,
-                text='Paging (number of items per page, 0 disables):')
-            self.usepagesize_lbl.pack(side='top', anchor='w')
-            self.use_pagesize_ivar = Tkinter.IntVar()
-            self.use_pagesize_ivar.set(cfg.options.use_pagesize)
-            self.use_pagesize_entry = Tkinter.Entry(self.options_frm,
-                width=10, textvariable=self.use_pagesize_ivar)
-            self.use_pagesize_entry.bind('<Return>', self.set_use_pagesize)
-            self.use_pagesize_entry.pack(side='top', anchor='w')
+            # log_pagesize integer var:
+            self.log_pagesize_lbl = Tkinter.Label(self.options_frm,
+                text='Paging (number of items per log page, 0 disables):')
+            self.log_pagesize_lbl.pack(side='top', anchor='w')
+            self.log_pagesize_ivar = Tkinter.IntVar()
+            self.log_pagesize_ivar.set(cfg.options.log_pagesize)
+            self.log_pagesize_entry = Tkinter.Entry(self.options_frm,
+                width=10, textvariable=self.log_pagesize_ivar)
+            self.log_pagesize_entry.bind('<Return>', self.set_log_pagesize)
+            self.log_pagesize_entry.pack(side='top', anchor='w')
+
+            # dir_pagesize integer var:
+            self.dir_pagesize_lbl = Tkinter.Label(self.options_frm,
+                text='Paging (number of items per dir page, 0 disables):')
+            self.dir_pagesize_lbl.pack(side='top', anchor='w')
+            self.dir_pagesize_ivar = Tkinter.IntVar()
+            self.dir_pagesize_ivar.set(cfg.options.dir_pagesize)
+            self.dir_pagesize_entry = Tkinter.Entry(self.options_frm,
+                width=10, textvariable=self.dir_pagesize_ivar)
+            self.dir_pagesize_entry.bind('<Return>', self.set_dir_pagesize)
+            self.dir_pagesize_entry.pack(side='top', anchor='w')
 
             # directory view template:
             self.dirtemplate_lbl = Tkinter.Label(self.options_frm,
@@ -507,9 +517,6 @@ def gui(host, port):
         def toggle_use_cvsgraph(self, event=None):
             cfg.options.use_cvsgraph = self.cvsgraph_ivar.get()
 
-        def toggle_use_enscript(self, event=None):
-            cfg.options.use_enscript = self.enscript_ivar.get()
-
         def toggle_use_localtime(self, event=None):
             cfg.options.use_localtime = self.use_localtime_ivar.get()
 
@@ -519,8 +526,11 @@ def gui(host, port):
         def toggle_useresearch(self, event=None):
             cfg.options.use_re_search = self.useresearch_ivar.get()
 
-        def set_use_pagesize(self, event=None):
-            cfg.options.use_pagesize = self.use_pagesize_ivar.get()
+        def set_log_pagesize(self, event=None):
+            cfg.options.log_pagesize = self.log_pagesize_ivar.get()
+
+        def set_dir_pagesize(self, event=None):
+            cfg.options.dir_pagesize = self.dir_pagesize_ivar.get()
 
         def set_templates_log(self, event=None):
             cfg.templates.log = self.logtemplate_svar.get()
@@ -614,7 +624,7 @@ def cli(argv):
             if pid != 0:
                 sys.exit()  
         if options.start_gui:
-            gui(options.host, options.port, options.config_file)
+            gui(options.host, options.port)
             return
         elif options.port:
             def ready(server):

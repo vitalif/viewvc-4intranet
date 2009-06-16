@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*-python-*-
 #
-# Copyright (C) 1999-2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -430,9 +430,7 @@ def main(server, cfg, viewvc_link):
         commits = [ ]
         query = 'skipped'
 
-    script_name = server.getenv('SCRIPT_NAME', '')
-
-    data = {
+    data = ezt.TemplateData({
       'cfg' : cfg,
       'address' : cfg.general.address,
       'vsn' : viewvc.__version__,
@@ -455,18 +453,11 @@ def main(server, cfg, viewvc_link):
       'num_commits' : len(commits),
       'rss_href' : None,
       'repositories' : db.GetRepositoryList(),
-      }
-
-    if form_data.hours:
-      data['hours'] = form_data.hours
-    else:
-      data['hours'] = 2
-    
-    
-
-    server.header()
+      'hours' : form_data.hours and form_data.hours or 2,
+      })
 
     # generate the page
+    server.header()
     template = viewvc.get_view_template(cfg, "query")
     template.generate(server.file(), data)
 

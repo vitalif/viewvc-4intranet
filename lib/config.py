@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 1999-2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -43,7 +43,7 @@ import cvsdb
 class Config:
   _sections = ('general', 'utilities', 'options', 'cvsdb', 'templates')
   _force_multi_value = ('cvs_roots', 'svn_roots', 'languages', 'kv_files',
-                        'root_parents', 'allowed_views')
+                        'root_parents', 'allowed_views', 'mime_types_files')
 
   def __init__(self):
     for section in self._sections:
@@ -230,7 +230,7 @@ class Config:
     self.general.svn_roots = { }
     self.general.root_parents = []
     self.general.default_root = ''
-    self.general.mime_types_file = ''
+    self.general.mime_types_files = ["mimetypes.conf"]
     self.general.address = ''
     self.general.kv_files = [ ]
     self.general.languages = ['en-us']
@@ -246,12 +246,13 @@ class Config:
 
     self.options.root_as_url_component = 1
     self.options.checkout_magic = 0
-    self.options.allowed_views = ['markup', 'annotate', 'roots']
-    self.options.authorizer = 'forbidden'
+    self.options.allowed_views = ['annotate', 'diff', 'markup', 'roots']
+    self.options.authorizer = None
     self.options.mangle_email_addresses = 0
     self.options.default_file_view = "log"
     self.options.http_expiration_time = 600
     self.options.generate_etags = 1
+    self.options.svn_ignore_mimetype = 0
     self.options.svn_config_dir = None
     self.options.use_rcsparse = 0
     self.options.sort_by = 'file'
@@ -276,10 +277,13 @@ class Config:
     self.options.use_localtime = 0
     self.options.short_log_len = 80
     self.options.enable_syntax_coloration = 1
+    self.options.detect_encoding = 0
     self.options.use_cvsgraph = 0
     self.options.cvsgraph_conf = "cvsgraph.conf"
+    self.options.allowed_cvsgraph_useropts = []
     self.options.use_re_search = 0
-    self.options.use_pagesize = 0
+    self.options.dir_pagesize = 0
+    self.options.log_pagesize = 0
     self.options.limit_changes = 100
     self.options.cvs_ondisk_charset = 'cp1251'
     self.options.binary_mime_re = '^(?!text/|.*\Wxml)'

@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 1999-2006 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -39,7 +39,7 @@ def _parse(hdr, result):
   while pos < len(hdr):
     name = _re_token.match(hdr, pos)
     if not name:
-      raise AcceptParseError()
+      raise AcceptLanguageParseError()
     a = result.item_class(string.lower(name.group(1)))
     pos = name.end()
     while 1:
@@ -210,7 +210,7 @@ class _LanguageSelector:
   def append(self, item):
     self.requested.append(item)
 
-class AcceptParseError(Exception):
+class AcceptLanguageParseError(Exception):
   pass
 
 def _test():

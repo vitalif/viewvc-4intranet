@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 1999-2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -31,6 +31,12 @@ from svn import fs, repos, core, client, delta
 if (core.SVN_VER_MAJOR, core.SVN_VER_MINOR, core.SVN_VER_PATCH) < (1, 3, 1):
   raise Exception, "Version requirement not met (needs 1.3.1 or better)"
 
+### Pre-1.5 SubversionException's might not have the .msg and .apr_err members
+def _fix_subversion_exception(e):
+  if not hasattr(e, 'apr_err'):
+    e.apr_err = e[1]
+  if not hasattr(e, 'message'):
+    e.message = e[0]
   
 def _allow_all(root, path, pool):
   """Generic authz_read_func that permits access to all paths"""
@@ -174,6 +180,9 @@ class NodeHistory:
 
 
 def _get_history(svnrepos, path, rev, path_type, limit=0, options={}):
+  if svnrepos.youngest == 0:
+    return []
+
   rev_paths = []
   fsroot = svnrepos._getroot(rev)
   show_all_logs = options.get('svn_show_all_dir_logs', 0)
@@ -190,6 +199,7 @@ def _get_history(svnrepos, path, rev, path_type, limit=0, options={}):
     repos.svn_repos_history(svnrepos.fs_ptr, path, history.add_history,
                             1, rev, options.get('svn_cross_copies', 0))
   except core.SubversionException, e:
+    _fix_subversion_exception(e)
     if e.apr_err != core.SVN_ERR_CEASE_INVOCATION:
       raise
 
@@ -314,6 +324,7 @@ class BlameSource:
       client.blame2(local_url, _rev2optrev(rev), _rev2optrev(first_rev),
                     _rev2optrev(rev), self._blame_cb, ctx)
     except core.SubversionException, e:
+      _fix_subversion_exception(e)
       if e.apr_err == core.SVN_ERR_CLIENT_IS_BINARY_FILE:
         raise vclib.NonTextualFileContents
       raise
@@ -688,6 +699,7 @@ class LocalSubversionRepository(vclib.Repository):
         info2 = '/dev/null', _date_from_rev(rev2), rev2
       return vclib._diff_fp(temp1, temp2, info1, info2, self.diff_cmd, args)
     except core.SubversionException, e:
+      _fix_subversion_exception(e)
       if e.apr_err == core.SVN_ERR_FS_NOT_FOUND:
         raise vclib.InvalidRevision
       raise
@@ -727,6 +739,7 @@ class LocalSubversionRepository(vclib.Repository):
       results = repos.svn_repos_trace_node_locations(self.fs_ptr, path,
                                                      rev, [old_rev], _allow_all)
     except core.SubversionException, e:
+      _fix_subversion_exception(e)
       if e.apr_err == core.SVN_ERR_FS_NOT_FOUND:
         raise vclib.ItemNotFound(path)
       raise
@@ -776,6 +789,7 @@ class LocalSubversionRepository(vclib.Repository):
           try:
             mid_id = fs.node_id(self._getroot(mid), path)
           except core.SubversionException, e:
+            _fix_subversion_exception(e)
             if e.apr_err == core.SVN_ERR_FS_NOT_FOUND:
               cmp = -1
             else:

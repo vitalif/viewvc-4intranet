@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 1999-2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -21,7 +21,7 @@ import tempfile
 import popen2
 import time
 import urllib
-from svn_repos import Revision, SVNChangedPath, _datestr_to_date, _compare_paths, _path_parts, _cleanup_path, _rev2optrev
+from svn_repos import Revision, SVNChangedPath, _datestr_to_date, _compare_paths, _path_parts, _cleanup_path, _rev2optrev, _fix_subversion_exception
 from svn import core, delta, client, wc, ra
 
 
@@ -254,7 +254,7 @@ class RemoteSubversionRepository(vclib.Repository):
       dirent = dirents[entry.name]
       entry.date, entry.author, entry.log, changes = \
                   self.revinfo(dirent.created_rev)
-      entry.rev = dirent.created_rev
+      entry.rev = str(dirent.created_rev)
       entry.size = dirent.size
       entry.lockinfo = None
       if locks.has_key(entry.name):
@@ -378,6 +378,7 @@ class RemoteSubversionRepository(vclib.Repository):
         temp2 = '/dev/null'
       return vclib._diff_fp(temp1, temp2, info1, info2, self.diff_cmd, args)
     except core.SubversionException, e:
+      _fix_subversion_exception(e)
       if e.apr_err == core.SVN_ERR_FS_NOT_FOUND:
         raise vclib.InvalidRevision
       raise
@@ -501,6 +502,7 @@ class RemoteSubversionRepository(vclib.Repository):
     try:
       results = ra.get_locations(self.ra_session, path, rev, [old_rev])
     except core.SubversionException, e:
+      _fix_subversion_exception(e)
       if e.apr_err == core.SVN_ERR_FS_NOT_FOUND:
         raise vclib.ItemNotFound(path)
       raise

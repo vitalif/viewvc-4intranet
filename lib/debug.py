@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 1999-2007 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2008 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -48,13 +48,17 @@ if SHOW_TIMES:
     else:
       _times[which] = t
 
-  def dump():
-    for name, value in _times.items():
-      print '%s: %.6f<br />' % (name, value)
+  def t_dump(out):
+    out.write('<div>')
+    names = _times.keys()
+    names.sort()
+    for name in names:
+      out.write('%s: %.6fs<br/>\n' % (name, _times[name]))
+    out.write('</div>')
 
 else:
 
-  t_start = t_end = dump = lambda *args: None
+  t_start = t_end = t_dump = lambda *args: None
 
 
 class ViewVCException:
