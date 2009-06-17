@@ -3769,9 +3769,12 @@ def build_commit(request, files, max_files, dir_strip, format):
     # vclib layer and, thus, the vcauth stuff that layer uses).
     my_repos = all_repos.get(f.GetRepository(), '')
     if not my_repos:
-      my_repos = all_repos[f.GetRepository()] = request.create_repos(f.GetRepository())
+      try:
+        my_repos = all_repos[f.GetRepository()] = request.create_repos(f.GetRepository())
+      except:
+        my_repos = None
     if not my_repos:
-      raise vclib.ItemNotFound(where)
+      return None
     if my_repos['roottype'] == 'cvs':
       try: where = unicode(where,'utf-8')
       except: pass
