@@ -3902,7 +3902,7 @@ def build_commit(request, files, max_files, dir_strip, format):
     commit.rss_url = '%s://%s%s' % \
       (request.server.getenv("HTTPS") == "on" and "https" or "http",
        request.server.getenv("HTTP_HOST"),
-       request.get_url(view_func=view_revision,
+       request.get_url(root=my_repos['rootname'], view_func=view_revision,
                        params={'revision': commit.rev},
                        escape=1))
   else:
