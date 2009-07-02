@@ -1155,7 +1155,8 @@ def htmlify(html, mangle_email_addrs=0):
 def format_log(log, cfg, htmlize=1):
   if not log:
     return log
-  log = unicode(log.decode('utf-8'))
+  try: log = unicode(log.decode('utf-8'))
+  except: pass
   if htmlize:
     s = htmlify(log[:cfg.options.short_log_len],
                 cfg.options.mangle_email_addresses)
