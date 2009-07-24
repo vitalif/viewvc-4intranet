@@ -4106,7 +4106,8 @@ def view_query(request):
       if all[r][1] == repos_type:
         re.append('^'+all[r][0]+'$')
     re = '|'.join(re)
-    query.SetRepository(re, 'regex')
+    if len(re) > 0:
+      query.SetRepository(re, 'regex')
   # treat "HEAD" specially ...
   if branch_match == 'exact' and branch == 'HEAD':
     query.SetBranch('')
