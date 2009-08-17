@@ -4076,6 +4076,11 @@ def view_query(request):
   date_types = { 'hours':1, 'day':1, 'week':1, 'month':1,
                  'all':1, 'explicit':1 }
 
+  # if file includes '/' character and file_match is exact,
+  # then split file to file and dir overriding dir from query
+  if file_match == 'exact' and file.find('/') >= 0:
+    (dir, file) = file.rsplit('/', 1)
+
   # parse various fields, validating or converting them
   if not match_types.has_key(branch_match): branch_match = 'exact'
   if not match_types.has_key(file_match): file_match = 'exact'
