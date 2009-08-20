@@ -33,12 +33,6 @@
             [is commits.files.type "Change"]&lt;/a&gt;[end]
             [is commits.files.type "Remove"]&lt;/del&gt;[end]
           &lt;/td&gt;
-          &lt;td style=&quot;vertical-align: top;&quot;&gt;
-            [if-any commits.files.date][commits.files.date][else]&amp;nbsp;[end]
-          &lt;/td&gt;
-          &lt;td style=&quot;vertical-align: top;&quot;&gt;
-            [if-any commits.files.author][commits.files.author][else]&amp;nbsp;[end]
-          &lt;/td&gt;
         &lt;/tr&gt;
         [end]
         [if-any commits.limited_files]
