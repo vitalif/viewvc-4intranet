@@ -1,4 +1,3 @@
-# -*-python-*-
 #
 # Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
 #
@@ -37,6 +36,7 @@ import time
 import types
 import urllib
 import datetime
+import locale
 
 # These modules come from our library (the stub has set up the path)
 import accept
@@ -1528,7 +1528,13 @@ def make_rss_time_string(date, cfg):
   """
   if date is None:
     return None
-  return time.strftime("%a, %d %b %Y %H:%M:%S", time.gmtime(date)) + ' UTC'
+  loc = locale.setlocale(locale.LC_TIME)
+  if loc.lower() != 'c' and loc.lower()[:2] != 'en':
+    locale.setlocale(locale.LC_TIME, 'C')
+  tm = time.strftime("%a, %d %b %Y %H:%M:%S", time.gmtime(date)) + ' UTC'
+  if loc.lower() != 'c' and loc.lower()[:2] != 'en':
+    locale.setlocale(locale.LC_TIME, loc)
+  return tm
 
 def make_comma_sep_list_string(items):
   return string.join(map(lambda x: x.name, items), ', ')
