@@ -14,7 +14,7 @@
 #
 # -----------------------------------------------------------------------
 
-__version__ = '1.2-dev-2204'
+__version__ = '1.2-dev-2243'
 
 # this comes from our library; measure the startup time
 import debug
@@ -198,6 +198,9 @@ class Request:
 
     # Process the query params
     for name, values in self.server.params().items():
+      # we only care about the first value
+      value = values[0]
+      
       # patch up old queries that use 'cvsroot' to look like they used 'root'
       if name == 'cvsroot':
         name = 'root'
@@ -208,25 +211,18 @@ class Request:
         name = 'pathrev'
         needs_redirect = 1
 
-      # validate the parameter
-      _validate_param(name, values[0])
+      # redirect view=rev to view=revision, too
+      if name == 'view' and value == 'rev':
+        value = 'revision'
+        needs_redirect = 1
 
-      # Only allow the magic ViewVC MIME types (the ones used for
-      # requesting the markup as as-text views) to be declared via CGI
-      # params.  Ignore disallowed values.
-      if (name == 'content-type') and \
-         (not values[0] in (viewcvs_mime_type,
-                            alt_mime_type,
-                            'text/plain')):
-        continue
+      # validate the parameter
+      _validate_param(name, value)
       
       # if we're here, then the parameter is okay
-      self.query_dict[name] = values[0]
+      self.query_dict[name] = value
 
-    # handle view parameter, redirecting old view=rev URLs to view=revision
-    if self.query_dict.get('view') == 'rev':
-      self.query_dict['view'] = 'revision'
-      needs_redirect = 1
+    # Resolve the view parameter into a handler function.
     self.view_func = _views.get(self.query_dict.get('view', None), 
                                 self.view_func)
 
@@ -419,15 +415,14 @@ class Request:
         and self.view_func is not redirect_pathrev):
       needs_redirect = 1
 
-    # redirect now that we know the URL is valid
-    if needs_redirect:
-      self.server.redirect(self.get_url())
-
     # startup is done now.
     debug.t_end('startup')
-    
-    # Call the function for the selected view.
-    self.view_func(self)
+
+    # If we need to redirect, do so.  Otherwise, handle our requested view.
+    if needs_redirect:
+      self.server.redirect(self.get_url())
+    else:
+      self.view_func(self)
 
   def get_url(self, escape=0, partial=0, prefix=0, **args):
     """Constructs a link to another ViewVC page just like the get_link
@@ -640,26 +635,29 @@ def _validate_param(name, value):
   this function throws an exception. Otherwise, it simply returns None.
   """
 
+  # First things first -- check that we have a legal parameter name.
   try:
     validator = _legal_params[name]
   except KeyError:
     raise debug.ViewVCException(
-      'An illegal parameter name ("%s") was passed.' % name,
+      'An illegal parameter name was provided.',
       '400 Bad Request')
 
+  # Is there a validator?  Is it a regex or a function?  Validate if
+  # we can, returning without incident on valid input.
   if validator is None:
     return
+  elif hasattr(validator, 'match'):
+    if validator.match(value):
+      return
+  else:
+    if validator(value):
+      return
 
-  # is the validator a regex?
-  if hasattr(validator, 'match'):
-    if not validator.match(value):
-      raise debug.ViewVCException(
-        'An illegal value ("%s") was passed as a parameter.' %
-        value, '400 Bad Request')
-    return
-
-  # the validator must be a function
-  validator(value)
+  # If we get here, the input value isn't valid.
+  raise debug.ViewVCException(
+    'An illegal value was provided for the "%s" parameter.' % (name),
+    '400 Bad Request')
 
 def _validate_regex(value):
   # hmm. there isn't anything that we can do here.
@@ -669,6 +667,15 @@ def _validate_regex(value):
   ### parameters could constitute a CSS attack.
   pass
 
+def _validate_view(value):
+  # Return true iff VALUE is one of our allowed views.
+  return _views.has_key(value)
+
+def _validate_mimetype(value):
+  # For security purposes, we only allow mimetypes from a predefined set
+  # thereof.
+  return value in (viewcvs_mime_type, alt_mime_type, 'text/plain')
+
 # obvious things here. note that we don't need uppercase for alpha.
 _re_validate_alpha = re.compile('^[a-z]+$')
 _re_validate_number = re.compile('^[0-9]+$')
@@ -677,10 +684,6 @@ _re_validate_boolint = re.compile('^[01]$')
 # when comparing two revs, we sometimes construct REV:SYMBOL, so ':' is needed
 _re_validate_revnum = re.compile('^[-_.a-zA-Z0-9:~\\[\\]/]*$')
 
-# it appears that RFC 2045 also says these chars are legal: !#$%&'*+^{|}~`
-# but woah... I'll just leave them out for now
-_re_validate_mimetype = re.compile('^[-_.a-zA-Z0-9/]+$')
-
 # date time values
 _re_validate_datetime = re.compile(r'^(\d\d\d\d-\d\d-\d\d(\s+\d\d:\d\d'
                                    '(:\d\d)?)?)?$')
@@ -688,7 +691,7 @@ _re_validate_datetime = re.compile(r'^(\d\d\d\d-\d\d-\d\d(\s+\d\d:\d\d'
 # the legal query parameters and their validation functions
 _legal_params = {
   'root'          : None,
-  'view'          : None,
+  'view'          : _validate_view,
   'search'        : _validate_regex,
   'p1'            : None,
   'p2'            : None,
@@ -710,7 +713,7 @@ _legal_params = {
   'r2'            : _re_validate_revnum,
   'tr2'           : _re_validate_revnum,
   'revision'      : _re_validate_revnum,
-  'content-type'  : _re_validate_mimetype,
+  'content-type'  : _validate_mimetype,
 
   # for cvsgraph
   'gflip'         : _re_validate_boolint,
@@ -1434,10 +1437,14 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
       except (SyntaxError, ImportError):
         pass
     try:
-      lexer = get_lexer_for_mimetype(mime_type, encoding=encoding)
+      lexer = get_lexer_for_mimetype(mime_type,
+                                     encoding=encoding,
+                                     stripnl=False)
     except ClassNotFound:
       try:
-        lexer = get_lexer_for_filename(filename, encoding=encoding)
+        lexer = get_lexer_for_filename(filename,
+                                       encoding=encoding,
+                                       stripnl=False)
       except ClassNotFound:
         use_pygments = 0
   except ImportError:
@@ -4428,10 +4435,9 @@ def view_error(server, cfg):
   exc_dict = debug.GetExceptionData()
   status = exc_dict['status']
   if exc_dict['msg']:
-    exc_dict['msg'] = htmlify(exc_dict['msg'], mangle_email_addrs=0)
+    exc_dict['msg'] = server.escape(exc_dict['msg'])
   if exc_dict['stacktrace']:
-    exc_dict['stacktrace'] = htmlify(exc_dict['stacktrace'],
-                                     mangle_email_addrs=0)
+    exc_dict['stacktrace'] = server.escape(exc_dict['stacktrace'])
   handled = 0
 
   # use the configured error template if possible
