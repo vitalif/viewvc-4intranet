@@ -741,7 +741,7 @@ _legal_params = {
   'query_revision': None,
   'who'           : _validate_regex,
   'who_match'     : _re_validate_alpha,
-  'comment'       : _validate_regex,
+  'comment'       : None,
   'comment_match' : _re_validate_alpha,
   'querysort'     : _re_validate_alpha,
   'date'          : _re_validate_alpha,
