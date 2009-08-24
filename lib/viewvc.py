@@ -665,7 +665,7 @@ def _validate_regex(value):
   ### we need to watch the flow of these parameters through the system
   ### to ensure they don't hit the page unescaped. otherwise, these
   ### parameters could constitute a CSS attack.
-  pass
+  return True
 
 def _validate_view(value):
   # Return true iff VALUE is one of our allowed views.
