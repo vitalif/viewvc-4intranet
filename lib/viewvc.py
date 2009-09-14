@@ -3115,6 +3115,7 @@ def view_diff(request):
     human_readable = 1
   elif format == 'h':
     diff_type = vclib.UNIFIED
+    diff_options['context'] = 5
     human_readable = 1
   elif format == 'u':
     diff_type = vclib.UNIFIED
