@@ -318,7 +318,8 @@ class NonTextualFileContents(Error):
 # ======================================================================
 # Implementation code used by multiple vclib modules
 
-import popen
+import subprocess
+import tempfile
 import os
 import time
 
@@ -362,11 +363,16 @@ class _diff_fp:
   def __init__(self, temp1, temp2, info1=None, info2=None, diff_cmd='diff', diff_opts=[]):
     self.temp1 = temp1
     self.temp2 = temp2
+    self.temp3 = tempfile.mktemp()
     args = diff_opts[:]
     if info1 and info2:
       args.extend(["-L", self._label(info1), "-L", self._label(info2)])
     args.extend([temp1, temp2])
-    self.fp = popen.popen(diff_cmd, args, "r")
+    args.insert(0, diff_cmd)
+    self.fp = open(self.temp3, 'w+b')
+    proc = subprocess.Popen(args, 0, diff_cmd, self.fp, self.fp, self.fp)
+    proc.wait()
+    self.fp.seek(0)
 
   def read(self, bytes):
     return self.fp.read(bytes)
@@ -388,6 +394,10 @@ class _diff_fp:
         if self.temp2 and self.temp2 != '/dev/null':
           os.remove(self.temp2)
         self.temp2 = None
+        try:
+          os.remove(self.temp3)
+        finally:
+          self.temp3 = None
 
   def __del__(self):
     self.close()
