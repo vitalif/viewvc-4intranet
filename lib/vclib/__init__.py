@@ -318,7 +318,6 @@ class NonTextualFileContents(Error):
 # ======================================================================
 # Implementation code used by multiple vclib modules
 
-import subprocess
 import tempfile
 import os
 import time
@@ -369,9 +368,8 @@ class _diff_fp:
       args.extend(["-L", self._label(info1), "-L", self._label(info2)])
     args.extend([temp1, temp2])
     args.insert(0, diff_cmd)
-    self.fp = open(self.temp3, 'w+b')
-    proc = subprocess.Popen(args, 0, diff_cmd, self.fp, self.fp, self.fp)
-    proc.wait()
+    os.system("'"+"' '".join(args)+"' &> "+self.temp3)
+    self.fp = open(self.temp3, 'rb')
     self.fp.seek(0)
 
   def read(self, bytes):
@@ -381,6 +379,7 @@ class _diff_fp:
     return self.fp.readline()
 
   def close(self):
+    return
     try:
       if self.fp:
         self.fp.close()
