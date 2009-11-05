@@ -4190,11 +4190,13 @@ def view_query(request):
     limited_files = 0
     current_desc = query.commit_list[0].GetDescriptionID()
     current_rev = query.commit_list[0].GetRevision()
+    current_repo = query.commit_list[0].GetRepository()
     dir_strip = _path_join(repos_dir)
 
     for commit in query.commit_list:
       commit_desc = commit.GetDescriptionID()
       commit_rev = commit.GetRevision()
+      commit_repo = commit.GetRepository()
 
       # base modification time on the newest commit
       if commit.GetTime() > mod_time:
@@ -4203,11 +4205,11 @@ def view_query(request):
       # For CVS, group commits with the same commit message.
       # For Subversion, group them only if they have the same revision number
       if request.roottype == 'cvs':
-        if current_desc == commit_desc:
+        if current_repo == commit_repo and current_desc == commit_desc:
           files.append(commit)
           continue
       else:
-        if current_rev == commit_rev:
+        if current_repo == commit_repo and current_rev == commit_rev:
           files.append(commit)
           continue
 
@@ -4224,6 +4226,7 @@ def view_query(request):
       limited_files = 0
       current_desc = commit_desc
       current_rev = commit_rev
+      current_repo = commit_repo
 
     # we need to tack on our last commit grouping, if any
     commit_item = build_commit(request, files, limit_changes,

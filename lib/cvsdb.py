@@ -441,26 +441,26 @@ class CheckinDatabase:
         if len(query.directory_list):
             temp = self.SQLQueryListString("dirs.dir", query.directory_list)
             condList.append(temp)
-            
+
         if len(query.file_list):
             tableList.append(("files", "(%s.fileid=files.id)" % (commits_table)))
             temp = self.SQLQueryListString("files.file", query.file_list)
             condList.append(temp)
-            
+
         if len(query.revision_list):
             condList.append("(%s.revision IN (" % (commits_table) + ','.join(map(lambda s: self.db.literal(s), query.revision_list)) + "))")
-            
+
         if len(query.author_list):
             tableList.append(("people", "(%s.whoid=people.id)" % (commits_table)))
             temp = self.SQLQueryListString("people.who", query.author_list)
             condList.append(temp)
-            
+
         if len(query.comment_list):
             tableList.append(("descs", "(%s.descid=descs.id)" % (commits_table)))
             temp = self.SQLQueryListString("descs.description",
                                            query.comment_list)
             condList.append(temp)
-            
+
         if query.from_date:
             temp = "(%s.ci_when>=\"%s\")" % (commits_table, str(query.from_date))
             condList.append(temp)
@@ -470,15 +470,15 @@ class CheckinDatabase:
             condList.append(temp)
 
         if query.sort == "date":
-            order_by = "ORDER BY %s.ci_when DESC,descid" % (commits_table)
+            order_by = "ORDER BY %s.ci_when DESC,descid,%s.repositoryid" % (commits_table, commits_table)
         elif query.sort == "author":
             tableList.append(("people", "(%s.whoid=people.id)" % (commits_table)))
-            order_by = "ORDER BY people.who,descid"
+            order_by = "ORDER BY people.who,descid,%s.repositoryid" % (commits_table)
         elif query.sort == "file":
             tableList.append(("files", "(%s.fileid=files.id)" % (commits_table)))
-            order_by = "ORDER BY files.file,descid"
+            order_by = "ORDER BY files.file,descid,%s.repositoryid" % (commits_table)
         elif query.sort == "relevance" and len(query.text_query):
-            order_by = "ORDER BY relevance DESC,%s.ci_when DESC,descid" % (commits_table)
+            order_by = "ORDER BY relevance DESC,%s.ci_when DESC,descid,%s.repositoryid" % (commits_table, commits_table)
 
         ## exclude duplicates from the table list, and split out join
         ## conditions from table names.  In future, the join conditions
