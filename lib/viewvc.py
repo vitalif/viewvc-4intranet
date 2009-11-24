@@ -1128,6 +1128,7 @@ _re_rewrite_url = re.compile('((http|https|ftp|file|svn|svn\+ssh)'
                              '(#([-a-zA-Z0-9%.~:_]+)?)?)')
 _re_rewrite_email = re.compile('([-a-zA-Z0-9_.\+]+)@'
                                '(([-a-zA-Z0-9]+\.)+[A-Za-z]{2,4})')
+_re_rewrites_html = [ [ _re_rewrite_url, r'<a href="\1">\1</a>' ] ]
 
 def mangle_email_addresses(text, style=0):
   # style=2:  truncation mangling
@@ -1151,9 +1152,17 @@ def htmlify(html, mangle_email_addrs=0):
   if not html:
     return html
   html = cgi.escape(html)
-  html = re.sub(_re_rewrite_url, r'<a href="\1">\1</a>', html)
+  global _re_rewrites_html
+  for i in _re_rewrites_html:
+    html = re.sub(i[0], i[1], html)
   html = mangle_email_addresses(html, mangle_email_addrs)
   return html
+
+def add_rewrite_html(regex, replace):
+  global _re_rewrites_html
+  if type(regex) == 'str' or type(regex) == 'unicode':
+    regex = re.compile(regex)
+  _re_rewrites_html.append([ regex, replace ])
 
 def format_log(log, cfg, htmlize=1):
   if not log:

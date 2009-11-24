@@ -23,6 +23,7 @@ import vclib
 import vclib.ccvs
 import vclib.svn
 import cvsdb
+import viewvc
 
 #########################################################################
 #
@@ -41,7 +42,7 @@ import cvsdb
 #########################################################################
 
 class Config:
-  _sections = ('general', 'utilities', 'options', 'cvsdb', 'templates')
+  _sections = ('general', 'utilities', 'options', 'cvsdb', 'templates', 'rewritehtml')
   _force_multi_value = ('cvs_roots', 'svn_roots', 'languages', 'kv_files',
                         'root_parents', 'allowed_views', 'mime_types_files')
 
@@ -66,6 +67,19 @@ class Config:
       self._process_root_options(self.parser, rootname)
     self.expand_root_parents()
     cvsdb.setencs(self.options.encodings.split(':'))
+    r = {}
+    for i in self.rewritehtml.__dict__.keys():
+      if i[-8:] == '.replace':
+        if r.get(i[:-8], None) is None:
+          r[i[:-8]] = ['','']
+        r[i[:-8]][1] = self.rewritehtml.__dict__[i]
+      if i[-5:] == '.find':
+        if r.get(i[:-5], None) is None:
+          r[i[:-5]] = ['','']
+        r[i[:-5]][0] = self.rewritehtml.__dict__[i]
+    for i in r.keys():
+      if r[i][0] != '':
+        viewvc.add_rewrite_html(r[i][0], r[i][1])
 
   def expand_root_parents(self):
     """Expand the configured root parents into individual roots."""
