@@ -202,34 +202,35 @@ form { margin: 0; }
 }
 .vc_diff_empty {
   background-color: #cccccc;
-  font-family: sans-serif;
+  font-family: consolas, dejavu sans mono, monospace;
   font-size: smaller;
 }
 .vc_diff_add {
   background-color: #aaffaa;
-  font-family: sans-serif;
+  font-family: consolas, dejavu sans mono, monospace;
   font-size: smaller;
 }
 .vc_diff_remove {
   background-color: #ffaaaa;
-  font-family: sans-serif;
+  font-family: consolas, dejavu sans mono, monospace;
   font-size: smaller;
 }
 .vc_diff_change {
   background-color: #ffff77;
-  font-family: sans-serif;
+  font-family: consolas, dejavu sans mono, monospace;
   font-size: smaller;
 }
 .vc_diff_change_empty {
   background-color: #eeee77;
-  font-family: sans-serif;
+  font-family: consolas, dejavu sans mono, monospace;
   font-size: smaller;
 }
 .vc_diff_nochange {
-  font-family: sans-serif;
+  font-family: consolas, dejavu sans mono, monospace;
   font-size: smaller;
 }
 .vc_diff_line_number {
+  font-family: consolas, dejavu sans mono, monospace;
 }
 .vc_raw_diff {
   background-color: #cccccc;
