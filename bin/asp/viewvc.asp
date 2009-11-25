@@ -24,15 +24,15 @@
 #
 
 #########################################################################
-#
 # INSTALL-TIME CONFIGURATION
 #
 # These values will be set during the installation process. During
-# development, they will remain None.
+# development, there will be no 'viewvcinstallpath.py'
 #
 
-LIBRARY_DIR = None
-CONF_PATHNAME = None
+import viewvcinstallpath
+LIBRARY_DIR = viewvcinstallpath.LIBRARY_DIR
+CONF_PATHNAME = viewvcinstallpath.CONF_PATHNAME
 
 #########################################################################
 #

@@ -236,10 +236,6 @@ LEGEND
     except IOError, e:
         error(str(e))
 
-    # (Optionally) substitute ViewVC path variables.
-    if subst_path_vars:
-        contents = replace_paths(contents)
-
     # Ensure the existence of the containing directories.
     dst_parent = os.path.dirname(destdir_path)
     if not os.path.exists(dst_parent):
@@ -428,7 +424,7 @@ Just hit [Enter] if a default is okay.
             ROOT_DIR = temp
         else:
             ROOT_DIR = default
-            
+
     # Prompt for DESTDIR if none provided.
     if DESTDIR is None:
         default = ''
@@ -441,7 +437,7 @@ Just hit [Enter] if a default is okay.
             DESTDIR = temp
         else:
             DESTDIR = default
-                
+
     # Install the files.
     print "Installing ViewVC to %s%s:" \
           % (ROOT_DIR, DESTDIR and " (DESTDIR = %s)" % (DESTDIR) or "")
@@ -449,7 +445,20 @@ Just hit [Enter] if a default is okay.
         apply(install_file, args)
     for args in TREE_LIST:
         apply(install_tree, args)
-        
+
+    # Write LIBRARY_DIR and CONF_PATHNAME into viewvcinstall.py config file
+    viewvcinstallpath = """#!/usr/bin/python
+LIBRARY_DIR = "%s"
+CONF_PATHNAME = "%s"
+""" % (os.path.join(ROOT_DIR, 'lib'), os.path.join(ROOT_DIR, 'viewvc.conf'))
+    open(os.path.join(ROOT_DIR, 'bin', 'viewvcinstallpath.py'),'wb').write(viewvcinstallpath)
+    if sys.platform != 'win32':
+      for i in ['cgi', 'mod_python']:
+        os.symlink(os.path.join(ROOT_DIR, 'bin', 'viewvcinstallpath.py'), os.path.join(ROOT_DIR, 'bin', i, 'viewvcinstallpath.py'))
+    else:
+      for i in ['asp', 'cgi', 'mod_python']:
+        open(os.path.join(ROOT_DIR, 'bin', i, 'viewvcinstallpath.py'),'wb').write(viewvcinstallpath)
+
     # Print some final thoughts.
     print """
 
