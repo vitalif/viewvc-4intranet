@@ -44,6 +44,13 @@ if LIBRARY_DIR:
 
 import sapi
 import imp
+import signal
+
+# Totally ignore SIGPIPE - needed for overcoming popen() errors
+def sigpipe(signum, frame):
+    pass
+
+signal.signal(signal.SIGPIPE, sigpipe)
 
 # Import real ViewVC module
 fp, pathname, description = imp.find_module('viewvc', [LIBRARY_DIR])
