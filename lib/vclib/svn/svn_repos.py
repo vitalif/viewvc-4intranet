@@ -779,7 +779,7 @@ class LocalSubversionRepository(vclib.Repository):
         while history:
           path, peg_revision = fs.history_location(history)
           if peg_revision <= limit_revision:
-            return max(peg_revision, limit_revision), _cleanup_path(path)
+            return peg_revision, _cleanup_path(path)
           history = fs.history_prev(history, 1)
         return peg_revision, _cleanup_path(path)
       else:

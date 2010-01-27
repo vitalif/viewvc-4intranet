@@ -3754,6 +3754,15 @@ def rev_cmp(rev1, rev2):
   rev2 = '.'.join(map(lambda s: f % (s), r2))
   return cmp(rev1, rev2)
 
+def path_prev_cmp(a, b):
+  ap = a.path_prev
+  if ap is None:
+    ap = a.path
+  bp = b.path_prev
+  if bp is None:
+    bp = b.path
+  return cmp(ap, bp)
+
 def build_commit(request, files, max_files, dir_strip, format):
   """Return a commit object build from the information in FILES, or
   None if no allowed files are present in the set.  DIR_STRIP is the
@@ -3858,7 +3867,15 @@ def build_commit(request, files, max_files, dir_strip, format):
       download_href = request.get_url(root=my_repos['rootname'], view_func=view_checkout,
                                       where=where, pathtype=vclib.FILE,
                                       params=params, escape=1)
-    if change_type == 'Change':
+    path_prev = None
+    if change_type == 'Add' and my_repos['roottype'] == 'svn':
+      try:
+        rev_prev, path_prev = my_repos['repos'].last_rev(where, int(rev), int(rev_prev))
+        if int(rev_prev) == int(rev):
+          path_prev = None
+      except:
+        path_prev = None
+    if change_type == 'Change' or change_type == 'Add' and path_prev is not None:
       diff_href_params = params.copy()
       diff_href_params.update({
         'r1': rev_prev,
@@ -3896,12 +3913,17 @@ def build_commit(request, files, max_files, dir_strip, format):
                               download_href=download_href,
                               prefer_markup=prefer_markup,
                               diff_href=diff_href,
-                              root=my_repos))
+                              root=my_repos,
+                              path=where,
+                              path_prev=path_prev))
 
   # No files survived authz checks?  Let's just pretend this
   # little commit didn't happen, shall we?
   if not len(commit_files):
     return None
+
+  # Sort items lexicographically and group moved files
+  commit_files.sort(path_prev_cmp)
 
   commit = _item(num_files=len(commit_files), files=commit_files,
                  plus=plus_count, minus=minus_count)
