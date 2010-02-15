@@ -4288,6 +4288,12 @@ def view_query(request):
   params['format'] = 'rss'
   rss_href = request.get_url(params=params, escape=1)
 
+  # rss <link rel=self>
+  params = request.query_dict.copy()
+  if 'format' in params:
+    del params['format']
+  rss_link_href = request.get_url(params=params, escape=1, prefix=1)
+
   # look only in... links
   params = request.query_dict.copy()
   params['repos_type'] = 'cvs'
@@ -4336,10 +4342,7 @@ def view_query(request):
     'commits': commits,
     'limit_changes': limit_changes,
     'limit_changes_href': limit_changes_href,
-    'rss_link_href': request.get_url(view_func=view_query,
-                                     params={'date': 'month'},
-                                     escape=1,
-                                     prefix=1),
+    'rss_link_href': rss_link_href,
     }))
   if format == 'rss':
     generate_page(request, "rss", data, "application/rss+xml")
