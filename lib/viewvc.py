@@ -3987,7 +3987,7 @@ def query_is_unsecure_patch(request, commits):
   lr = {}
   for commit in commits:
     for fileinfo in commit.files:
-      fn = _path_join([fileinfo.dir, fileinfo.file])
+      fn = _path_join([fileinfo.root['rootname'], fileinfo.dir, fileinfo.file])
       if mr.get(fn, ''):
         pr = mr[fn]
         if fileinfo.root['roottype'] == 'svn':

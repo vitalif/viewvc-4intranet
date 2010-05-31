@@ -39,18 +39,23 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
     r = self.cached.get(rootname, None)
     if r is not None:
       return r
-    try:
-      grent = self.grp.get(rootname, None)
-      if grent is None:
-        grent = map(lambda grn: grp.getgrnam(grn.replace('%s', re.sub('[^\w\.\-]+', '', rootname))), self.byroot.get(rootname, self.fmt))
-        self.grp[rootname] = grent
-      for i in grent:
-        if i.gr_mem and len(i.gr_mem) and self.username in i.gr_mem:
-          r = 1
-          break
-    except:
-      r = 0
+    grent = self.grp.get(rootname, None)
+    if grent is None:
+      grent = map(lambda grn: self.getgrnam(grn, rootname), self.byroot.get(rootname, self.fmt))
+      self.grp[rootname] = grent
+    r = 0
+    for i in grent:
+      if i and i.gr_mem and len(i.gr_mem) and self.username in i.gr_mem:
+        r = 1
+        break
     self.cached[rootname] = r
+    return r
+
+  def getgrnam(self, grn, rootname):
+    try:
+      r = grp.getgrnam(grn.replace('%s', re.sub('[^\w\.\-]+', '', rootname)))
+    except KeyError:
+      r = None
     return r
 
   def check_path_access(self, rootname, path_parts, pathtype, rev=None):
