@@ -13,13 +13,13 @@ import binascii
 import time
 import datetime
 import urllib2
-import json
+import anyjson
 
 cookie_name = 'simple_global_auth'
 cookie_expire = 86400*7
-cookie_path = '/'
-cookie_domain = 'svn.yourcmc.ru'
-globalauth_server = 'http://yourcmc.ru/wiki/Special:GlobalAuth'
+cookie_path = '/viewvc'
+cookie_domain = 'localhost'
+globalauth_server = 'http://bugs3.office.custis.ru/globalauth.cgi'
 cache_dir = os.path.abspath(os.path.dirname(__file__))+'/cache'
 cut_email_at = 1
 
@@ -112,9 +112,6 @@ def request_vars(req):
       while len(c) < l:
         c = c + req.read(l-len(c))
       v.update(util.parse_qs(c))
-  for i in v:
-    if v[i].__class__.__name__ == 'list':
-      v[i] = v[i][0]
   return v
 
 def log(s):
@@ -124,6 +121,17 @@ def log(s):
 def keydel(d, key):
   try: del d[key]
   except: pass
+
+def clean_uri(v, req):
+  uriargs = v.copy()
+  keydel(uriargs, 'ga_id')
+  keydel(uriargs, 'ga_res')
+  keydel(uriargs, 'ga_key')
+  keydel(uriargs, 'ga_client')
+  keydel(uriargs, 'ga_nologin')
+  keydel(uriargs, 'ga_require')
+  uri = 'http://'+req.hostname+req.uri+'?'+http_build_query(uriargs)
+  return uri
 
 def handler(req):
   global globalauth_server, cut_email_at
@@ -139,33 +147,25 @@ def handler(req):
     if ga_key != '' and ga_key == cacheget('K'+ga_id):
       cachedel('K'+ga_id)
       data = ''
-      if v.get('ga_nologin','') == 1:
+      if v.get('ga_nologin','') != '':
         data = 'nologin'
       else:
-        try: data = json.loads(v.get('ga_data',''))
-        except: pass
-      if data:
+        try: data = anyjson.deserialize(v.get('ga_data',''))
+        except: raise
+      if data != '':
         if data != 'nologin':
-          data = json.dumps(data)
+          data = anyjson.serialize(data)
         cacheset('D'+ga_id, data)
         raise apache.SERVER_RETURN, apache.HTTP_OK
       raise apache.SERVER_RETURN, apache.HTTP_NOT_FOUND
     elif ga_key == '' and r_id != ga_id:
       d = cacheget('D'+ga_id)
-      if d != 'nologin':
-        try: d = json.loads(d)
+      if d != 'nologin' and d != '':
+        try: d = anyjson.deserialize(d)
         except: d = ''
       if d != '':
         setcookie(req, ga_id)
-        uriargs = v.copy()
-        keydel(uriargs, 'ga_id')
-        keydel(uriargs, 'ga_res')
-        keydel(uriargs, 'ga_key')
-        keydel(uriargs, 'ga_client')
-        keydel(uriargs, 'ga_nologin')
-        keydel(uriargs, 'ga_require')
-        uri = 'http://'+req.hostname+req.uri+'?'+http_build_query(uriargs)
-        util.redirect(req, uri)
+        util.redirect(req, clean_uri(v, req))
         raise apache.SERVER_RETURN, apache.HTTP_OK
       raise apache.SERVER_RETURN, apache.HTTP_NOT_FOUND
   if r_id:
@@ -175,7 +175,7 @@ def handler(req):
   else:
     r_data = cacheget('D'+r_id)
     if r_data != 'nologin':
-      try: r_data = json.loads(r_data)
+      try: r_data = anyjson.deserialize(r_data)
       except: r_data = ''
   if v.get('ga_client', '') == '' and (not r_data and re.match('opera|firefox|chrome|safari', req.headers_in.get('User-Agent', ''), re.I)
      or v.get('ga_require', '') != ''):
@@ -193,7 +193,8 @@ def handler(req):
         raise Exception(resp)
     except:
       setcookie(req, 'nologin')
-      return apache.OK
+      util.redirect(req, clean_uri(v, req))
+      raise apache.SERVER_RETURN, apache.HTTP_OK
     return_uri = 'http://'+req.hostname+req.uri+'?ga_client=1';
     if req.args:
       return_uri = return_uri+'&'+req.args
