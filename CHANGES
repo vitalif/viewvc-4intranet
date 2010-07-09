@@ -1,4 +1,25 @@
-Version 1.1.0 (released ??-???-????)
+Version 1.2.0 (released ??-???-????)
+
+  * allow user-configurable cvsgraph display (issue #336)
+
+Version 1.1.2 (released 11-Aug-2009)
+
+  * security fix: validate the 'view' parameter to avoid XSS attack
+  * security fix: avoid printing illegal parameter names and values
+  * add optional support for character encoding detection (issue #400)
+  * fix username case handling in svnauthz module (issue #419)
+  * fix cvsdbadmin/svnadmin rebuild error on missing repos (issue #420)
+  * don't drop leading blank lines from colorized file contents (issue #422)
+  * add file.ezt template logic for optionally hiding binary file contents
+
+Version 1.1.1 (released 03-Jun-2009)
+
+  * fix broken query form (missing required template variables) (issue #416)
+  * fix bug in cvsdb which caused rebuild operations to lose data (issue #417)
+  * fix cvsdb purge/rebuild repos lookup to error on missing repos
+  * fix misleading file contents view page title
+
+Version 1.1.0 (released 13-May-2009)
 
   * add support for full content diffs (issue #153)
   * make many more data dictionary items available to all views
@@ -12,9 +33,7 @@ Version 1.1.0 (released ??-???-????)
   * add support for query by log message (issues #22, #121)
   * fix bug parsing 'svn blame' output with too-long author names (issue #221)
   * fix default standalone.py port to be within private IANA range (issue #234)
-  * add support for integration with GNU source-highlight (issue #285)
-  * add unified configury of allowed views
-  * add support for disabling the checkout view (now the default state)
+  * add unified configury of allowed views; checkout view disabled by default
   * add support for ranges of revisions to svndbadmin (issue #224)
   * make the query handling more forgiving of malformatted subdirs (issue #244)
   * add support for per-root configuration overrides (issue #371)
@@ -36,7 +55,24 @@ Version 1.1.0 (released ??-???-????)
   * show RSS/query links only for roots found in commits database (issue #357)
   * recognize Subversion svn:mime-type property values (issue #364)
   * hide CVS files when viewing tags/branches on which they don't exist
-  * add support for hiding errorful entries from the directory view (issue #105)
+  * allow hiding of errorful entries from the directory view (issue #105)
+  * fix directory view sorting UI
+  * tolerate malformed Accept-Language headers (issue #396)
+  * allow MIME type mapping overrides in ViewVC configuration (issue #401)
+  * fix exception in rev-sorted remote Subversion directory views (issue #409)
+  * allow setting of page sizes for log and dir views individually (issue #402)
+
+Version 1.0.9 (released 11-Aug-2009)
+
+  * security fix: validate the 'view' parameter to avoid XSS attack
+  * security fix: avoid printing illegal parameter names and values
+
+Version 1.0.8 (released 05-May-2009)
+
+  * fix directory view sorting UI
+  * tolerate malformed Accept-Language headers (issue #396)
+  * fix directory log views in revision-less Subversion repositories
+  * fix exception in rev-sorted remote Subversion directory views (issue #409)
 
 Version 1.0.7 (released 14-Oct-2008)
 

@@ -687,6 +687,7 @@ class TemplateData:
   consistent set of keys."""
 
   def __init__(self, initial_data={}):
+    initial_data['env_user_url'] = os.environ.get('user_url', '')
     self._items = initial_data
     
   def __getitem__(self, key):
