@@ -112,6 +112,9 @@ def request_vars(req):
       while len(c) < l:
         c = c + req.read(l-len(c))
       v.update(util.parse_qs(c))
+  for i in v:
+    if v[i].__class__.__name__ == 'list':
+      v[i] = v[i][0]
   return v
 
 def log(s):
