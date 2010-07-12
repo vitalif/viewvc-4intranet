@@ -198,7 +198,7 @@ def handler(req):
     if r_data != 'nologin':
       try: r_data = anyjson.deserialize(r_data)
       except: r_data = ''
-  if v.get('ga_client', '') == '' and (not r_data and re.match('opera|firefox|chrome|safari', req.headers_in.get('User-Agent', ''), re.I)
+  if v.get('ga_client', '') == '' and (not r_data and (re.match('opera|firefox|chrome|safari', req.headers_in.get('User-Agent', ''), re.I) or gac['ga_always_require'])
      or v.get('ga_require', '') != ''):
     ga_id = binascii.hexlify(os.urandom(16))
     ga_key = binascii.hexlify(os.urandom(16))
