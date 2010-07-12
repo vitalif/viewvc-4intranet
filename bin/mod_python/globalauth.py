@@ -15,18 +15,30 @@ import datetime
 import urllib2
 import anyjson
 
-cookie_name = 'simple_global_auth'
-cookie_expire = 86400*7
-cookie_path = '/viewvc'
-cookie_domain = 'localhost'
-globalauth_server = 'http://bugs3.office.custis.ru/globalauth.cgi'
-cache_dir = os.path.abspath(os.path.dirname(__file__))+'/cache'
-cut_email_at = 1
+import ga_config
+
+if not ga_config.gac.get('globalauth_server',''):
+  raise Exception('ga_config.gac must contain at least globalauth_server="URL"')
+
+gac = {
+  'cookie_name'       : 'simple_global_auth',
+  'cookie_expire'     : 86400*7,
+  'cookie_path'       : '/',
+  'cookie_domain'     : '',
+  'globalauth_server' : '',
+  'cache_dir'         : os.path.abspath(os.path.dirname(__file__))+'/cache',
+  'cut_email_at'      : 0,
+  'ga_always_require' : 0,
+}
+
+for i in gac:
+  if ga_config.gac.get(i, None) is not None:
+    gac[i] = ga_config.gac[i]
 
 def cacheset(key, value, expire = 86400):
-  global cache_dir
+  global gac
   try:
-    f = open(cache_dir+'/'+key,'w')
+    f = open(gac['cache_dir']+'/'+key,'w')
     if not expire:
       expire = 86400
     expire = time.time()+expire
@@ -38,14 +50,14 @@ def cacheset(key, value, expire = 86400):
   return 1
 
 def cacheget(key):
-  global cache_dir
+  global gac
   try:
-    f = open(cache_dir+'/'+key,'r')
+    f = open(gac['cache_dir']+'/'+key,'r')
     expire = f.readline()
     value = f.read()
     f.close()
     if time.time() > float(expire):
-      os.unlink(cache_dir+'/'+key)
+      os.unlink(gac['cache_dir']+'/'+key)
       return ''
     return value
   except:
@@ -53,9 +65,9 @@ def cacheget(key):
   return ''
 
 def cachedel(key):
-  global cache_dir
+  global gac
   try:
-    os.unlink(cache_dir+'/'+key)
+    os.unlink(gac['cache_dir']+'/'+key)
   except:
     pass
 
@@ -63,14 +75,17 @@ wd = { 0 : 'Mon', 1 : 'Tue', 2 : 'Wed', 3 : 'Thu', 4 : 'Fri', 5 : 'Sat', 6 : 'Su
 ms = { 1 : 'Jan', 2 : 'Feb', 3 : 'Mar', 4 : 'Apr', 5 : 'May', 6 : 'Jun', 7 : 'Jul', 8 : 'Aug', 9 : 'Sep', 10 : 'Oct', 11 : 'Nov', 12 : 'Dec' }
 
 def setcookie(req, value):
-  global cookie_name, cookie_path, cookie_domain, cookie_expire, wd, ms
+  global gac, wd, ms
   exp = ''
-  if cookie_expire > 0:
-    tm = int(time.time()+cookie_expire)
+  dom = gac['cookie_domain']
+  if not dom:
+    dom = req.hostname
+  if gac['cookie_expire'] > 0:
+    tm = int(time.time()+gac['cookie_expire'])
     tm = datetime.datetime.utcfromtimestamp(tm)
     tm = "%s, %02d-%s-%04d %02d:%02d:%02d GMT" % (wd[tm.weekday()], tm.day, ms[tm.month], tm.year, tm.hour, tm.minute, tm.second);
     exp = '; expires='+tm
-  req.headers_out.add('Set-Cookie', "%s=%s; path=%s; domain=%s%s" % (cookie_name, value, cookie_path, cookie_domain, exp))
+  req.headers_out.add('Set-Cookie', "%s=%s; path=%s; domain=%s%s" % (gac['cookie_name'], value, gac['cookie_path'], dom, exp))
 
 def http_build_query(params, topkey = ''):
   from urllib import quote
@@ -112,9 +127,11 @@ def request_vars(req):
       while len(c) < l:
         c = c + req.read(l-len(c))
       v.update(util.parse_qs(c))
+  #log("--REQUEST--")
   for i in v:
     if v[i].__class__.__name__ == 'list':
       v[i] = v[i][0]
+    #log("REQUEST: "+i+"="+v[i])
   return v
 
 def log(s):
@@ -137,12 +154,12 @@ def clean_uri(v, req):
   return uri
 
 def handler(req):
-  global globalauth_server, cut_email_at
+  global gac
   os.environ['REMOTE_USER'] = ''
   req.subprocess_env['REMOTE_USER'] = ''
   set = 0
   jar = Cookie.get_cookies(req)
-  r_id = jar.get(cookie_name, '')
+  r_id = jar.get(gac['cookie_name'], '')
   v = request_vars(req)
   ga_id = v.get('ga_id', '')
   if ga_id!='' and v.get('ga_client','')!='':
@@ -173,18 +190,19 @@ def handler(req):
       raise apache.SERVER_RETURN, apache.HTTP_NOT_FOUND
   if r_id:
     r_id = r_id.value
+  r_data = ''
   if r_id == 'nologin':
     r_data = 'nologin'
-  else:
+  elif r_id != '':
     r_data = cacheget('D'+r_id)
     if r_data != 'nologin':
       try: r_data = anyjson.deserialize(r_data)
       except: r_data = ''
   if v.get('ga_client', '') == '' and (not r_data and re.match('opera|firefox|chrome|safari', req.headers_in.get('User-Agent', ''), re.I)
-     or v.get('ga_require', '') != ''):
+     or v.get('ga_require', '') != '') or gac['ga_always_require']:
     ga_id = binascii.hexlify(os.urandom(16))
     ga_key = binascii.hexlify(os.urandom(16))
-    url = globalauth_server
+    url = gac['globalauth_server']
     if url.find('?') != -1:
       url = url+'&'
     else:
@@ -203,14 +221,14 @@ def handler(req):
       return_uri = return_uri+'&'+req.args
     cacheset('K'+ga_id, ga_key)
     url = url+'ga_id='+ga_id+'&ga_url='+urllib2.quote(return_uri)
-    if v.get('ga_require', '') == '':
+    if v.get('ga_require', '') == '' and not gac['ga_always_require']:
       url = url+'&ga_check=1'
     util.redirect(req, url)
     raise apache.SERVER_RETURN, apache.HTTP_OK
   elif r_data and r_data != 'nologin':
     r_email = r_data.get('user_email', '').encode('utf-8')
     r_url = r_data.get('user_url', '').encode('utf-8')
-    if cut_email_at:
+    if gac['cut_email_at']:
       p = r_email.find('@')
       if p != -1:
         r_email = r_email[0:p]
