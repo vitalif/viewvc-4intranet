@@ -60,7 +60,7 @@
       <td style="vertical-align: top;">
         [# only show a diff link for changes ]
         [is commits.files.type "Add"]<ins>[end]
-        [is commits.files.type "Change"]<a href="[commits.files.diff_href]">[end]
+        [if-any commits.files.diff_href]<a href="[commits.files.diff_href]">[end]
         [is commits.files.type "Remove"]<del>[end]
           [commits.files.plus]/[commits.files.minus]
         [is commits.files.type "Add"]</ins>[end]
