@@ -45,6 +45,7 @@ def cacheset(key, value, expire = 86400):
     f.write(str(expire)+"\n")
     f.write(value)
     f.close()
+    os.chmod(gac['cache_dir']+'/'+key,0600)
   except:
     raise
   return 1
