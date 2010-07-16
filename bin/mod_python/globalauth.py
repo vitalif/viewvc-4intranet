@@ -274,6 +274,6 @@ def handler(req):
   v = request_vars(req)
   if gac['fof_sudo_server'] != '':
     fof_sudo_handler(req, jar, v)
-  if gac['globalauth_server'] != '':
+  if os.environ['REMOTE_USER'] == '' and gac['globalauth_server'] != '':
     globalauth_handler(req, jar, v)
   return apache.OK
