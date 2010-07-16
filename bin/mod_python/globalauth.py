@@ -17,8 +17,8 @@ import anyjson
 
 import ga_config
 
-if not ga_config.gac.get('globalauth_server',''):
-  raise Exception('ga_config.gac must contain at least globalauth_server="URL"')
+if not ga_config.gac.get('globalauth_server','') and not ga_config.gac.get('fof_sudo_server',''):
+  raise Exception('ga_config.gac must contain at least globalauth_server="URL" or fof_sudo_server="URL"')
 
 gac = {
   'cookie_name'       : 'simple_global_auth',
@@ -29,36 +29,43 @@ gac = {
   'cache_dir'         : os.path.abspath(os.path.dirname(__file__))+'/cache',
   'cut_email_at'      : 0,
   'ga_always_require' : 0,
+  'fof_sudo_server'   : '',
+  'fof_sudo_cookie'   : 'fof_sudo_id',
 }
 
 for i in gac:
   if ga_config.gac.get(i, None) is not None:
     gac[i] = ga_config.gac[i]
 
-def cacheset(key, value, expire = 86400):
+def cachefn(key):
   global gac
+  key = re.sub('([^a-z0-9_\-]+)', lambda x: binascii.hexlify(x.group(1)), key)
+  return gac['cache_dir']+'/'+key
+
+def cacheset(key, value, expire = 86400):
+  fn = cachefn(key)
   try:
-    f = open(gac['cache_dir']+'/'+key,'w')
+    f = open(fn,'w')
     if not expire:
       expire = 86400
     expire = time.time()+expire
     f.write(str(expire)+"\n")
     f.write(value)
     f.close()
-    os.chmod(gac['cache_dir']+'/'+key,0600)
+    os.chmod(fn,0600)
   except:
     raise
   return 1
 
 def cacheget(key):
-  global gac
+  fn = cachefn(key)
   try:
-    f = open(gac['cache_dir']+'/'+key,'r')
+    f = open(fn,'r')
     expire = f.readline()
     value = f.read()
     f.close()
     if time.time() > float(expire):
-      os.unlink(gac['cache_dir']+'/'+key)
+      os.unlink(fn)
       return ''
     return value
   except:
@@ -66,9 +73,9 @@ def cacheget(key):
   return ''
 
 def cachedel(key):
-  global gac
+  fn = cachefn(key)
   try:
-    os.unlink(gac['cache_dir']+'/'+key)
+    os.unlink(fn)
   except:
     pass
 
@@ -154,14 +161,23 @@ def clean_uri(v, req):
   uri = 'http://'+req.hostname+req.uri+'?'+http_build_query(uriargs)
   return uri
 
-def handler(req):
+def set_env_user(req, r_data):
+  r_email = r_data.get('user_email', '').encode('utf-8')
+  r_url = r_data.get('user_url', '').encode('utf-8')
+  if gac['cut_email_at']:
+    p = r_email.find('@')
+    if p != -1:
+      r_email = r_email[0:p]
+  os.environ['REMOTE_USER'] = r_email
+  req.subprocess_env['REMOTE_USER'] = r_email
+  os.environ['user_url'] = r_url
+  req.subprocess_env['user_url'] = r_url
+
+def globalauth_handler(req, jar, v):
   global gac
-  os.environ['REMOTE_USER'] = ''
-  req.subprocess_env['REMOTE_USER'] = ''
-  set = 0
-  jar = Cookie.get_cookies(req)
   r_id = jar.get(gac['cookie_name'], '')
-  v = request_vars(req)
+  if r_id:
+    r_id = r_id.value
   ga_id = v.get('ga_id', '')
   if ga_id!='' and v.get('ga_client','')!='':
     ga_key = v.get('ga_key','')
@@ -189,8 +205,6 @@ def handler(req):
         util.redirect(req, clean_uri(v, req))
         raise apache.SERVER_RETURN, apache.HTTP_OK
       raise apache.SERVER_RETURN, apache.HTTP_NOT_FOUND
-  if r_id:
-    r_id = r_id.value
   r_data = ''
   if r_id == 'nologin':
     r_data = 'nologin'
@@ -209,7 +223,7 @@ def handler(req):
     else:
       url = url+'?'
     try:
-      resp = urllib2.urlopen(url+'ga_id='+ga_id+'&ga_key='+ga_key)
+      resp = urllib2.urlopen(url+'ga_id='+urllib2.quote(ga_id)+'&ga_key='+urllib2.quote(ga_key))
       resp.read()
       if resp.code != 200:
         raise Exception(resp)
@@ -221,20 +235,45 @@ def handler(req):
     if req.args:
       return_uri = return_uri+'&'+req.args
     cacheset('K'+ga_id, ga_key)
-    url = url+'ga_id='+ga_id+'&ga_url='+urllib2.quote(return_uri)
+    url = url+'ga_id='+urllib2.quote(ga_id)+'&ga_url='+urllib2.quote(return_uri)
     if v.get('ga_require', '') == '' and not gac['ga_always_require']:
       url = url+'&ga_check=1'
     util.redirect(req, url)
     raise apache.SERVER_RETURN, apache.HTTP_OK
   elif r_data and r_data != 'nologin':
-    r_email = r_data.get('user_email', '').encode('utf-8')
-    r_url = r_data.get('user_url', '').encode('utf-8')
-    if gac['cut_email_at']:
-      p = r_email.find('@')
-      if p != -1:
-        r_email = r_email[0:p]
-    os.environ['REMOTE_USER'] = r_email
-    req.subprocess_env['REMOTE_USER'] = r_email
-    os.environ['user_url'] = r_url
-    req.subprocess_env['user_url'] = r_url
+    set_env_user(req, r_data)
+
+def fof_sudo_handler(req, jar, v):
+  global gac
+  sudo_id = jar.get(gac['fof_sudo_cookie'], '')
+  if sudo_id:
+    sudo_id = sudo_id.value
+  if sudo_id != '':
+    url = gac['fof_sudo_server']
+    if url.find('?') != -1:
+      url = url+'&'
+    else:
+      url = url+'?'
+    try:
+      resp = urllib2.urlopen(url+'id='+urllib2.quote(sudo_id))
+      d = resp.read()
+      if resp.code != 200:
+        raise Exception(resp)
+      d = anyjson.deserialize(d)
+      set_env_user(req, d)
+    except:
+      pass
+
+def handler(req):
+  global gac
+  os.environ['REMOTE_USER'] = ''
+  req.subprocess_env['REMOTE_USER'] = ''
+  os.environ['user_url'] = ''
+  req.subprocess_env['user_url'] = ''
+  jar = Cookie.get_cookies(req)
+  v = request_vars(req)
+  if gac['fof_sudo_server'] != '':
+    fof_sudo_handler(req, jar, v)
+  if gac['globalauth_server'] != '':
+    globalauth_handler(req, jar, v)
   return apache.OK
