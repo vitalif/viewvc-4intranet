@@ -1355,20 +1355,22 @@ def common_template_data(request, revision=None, mime_type=None):
                                            escape=1)
   if is_querydb_nonempty_for_root(request):
     if request.pathtype == vclib.DIR:
+      par = {'date': 'month', 'format': 'rss'}
+      if request.username and request.cfg.options.authorizer:
+        par['fof_sudo'] = request.username
       data['rss_href'] = request.get_url(view_func=view_query,
-                                         params={'date': 'month',
-                                                 'format': 'rss'},
+                                         params=par,
                                          escape=1)
     elif request.pathtype == vclib.FILE:
       parts = _path_parts(request.where)
       where = _path_join(parts[:-1])
+      par = {'date': 'month', 'format': 'rss', 'file': parts[-1], 'file_match': 'exact'}
+      if request.username and request.cfg.options.authorizer:
+        par['fof_sudo'] = request.username
       data['rss_href'] = request.get_url(view_func=view_query,
                                          where=where,
                                          pathtype=request.pathtype,
-                                         params={'date': 'month',
-                                                 'format': 'rss',
-                                                 'file': parts[-1],
-                                                 'file_match': 'exact'},
+                                         params=par,
                                          escape=1)
   return data
 
@@ -4289,6 +4291,8 @@ def view_query(request):
   # rss link
   params = request.query_dict.copy()
   params['format'] = 'rss'
+  if request.username and request.cfg.options.authorizer:
+    params['fof_sudo'] = request.username
   rss_href = request.get_url(params=params, escape=1)
 
   # rss <link rel=self>
