@@ -762,6 +762,9 @@ _legal_params = {
   'rev'           : _re_validate_revnum,
   'tarball'       : _re_validate_boolint,
   'hidecvsroot'   : _re_validate_boolint,
+
+  # FeedOnFeeds sudo authorization
+  'fof_sudo'      : None,
   }
 
 def _path_join(path_parts):
