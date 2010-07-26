@@ -39,7 +39,7 @@ for i in gac:
 
 def cachefn(key):
   global gac
-  key = re.sub('([^a-z0-9_\-]+)', lambda x: binascii.hexlify(x.group(1)), key)
+  key = re.sub('([^a-zA-Z0-9_\-]+)', lambda x: binascii.hexlify(x.group(1)), key)
   return gac['cache_dir']+'/'+key
 
 def cacheset(key, value, expire = 86400):
