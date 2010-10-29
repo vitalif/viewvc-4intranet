@@ -3039,8 +3039,10 @@ def setup_diff(request):
 
   if request.roottype == 'svn':
     try:
-      rev1 = str(request.repos._getrev(rev1))
-      rev2 = str(request.repos._getrev(rev2))
+      (rev1, p1) = request.repos.last_rev(request.where, request.pathrev, rev1)
+      (rev2, p2) = request.repos.last_rev(request.where, request.pathrev, rev2)
+      rev1 = str(rev1)
+      rev2 = str(rev2)
     except vclib.InvalidRevision:
       raise debug.ViewVCException('Invalid revision(s) passed to diff',
                                   '400 Bad Request')
