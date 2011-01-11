@@ -251,6 +251,7 @@ def main(command, repository, revs=[], verbose=0, force=0):
     cfg = viewvc.load_config(CONF_PATHNAME)
     db = cvsdb.ConnectDatabase(cfg)
 
+    repository = os.path.realpath(repository)
     if command in ('rebuild', 'purge'):
         if verbose:
             print "Purging commit info for repository root `%s'" % repository
