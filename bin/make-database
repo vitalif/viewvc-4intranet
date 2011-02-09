@@ -57,6 +57,7 @@ CREATE TABLE checkins (
   removedlines int(11) DEFAULT '0' NOT NULL,
   descid mediumint(9),
   UNIQUE repositoryid (repositoryid,dirid,fileid,revision),
+  KEY repository_when (repositoryid,ci_when),
   KEY ci_when (ci_when),
   KEY whoid (whoid),
   KEY repositoryid_2 (repositoryid),
