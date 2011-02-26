@@ -179,7 +179,9 @@ class SvnRev:
             diffobj = svn.fs.FileDiff(base_root and base_root or None,
                                       base_root and change.base_path or None,
                                       change.path and fsroot or None,
-                                      change.path and change.path or None)
+                                      change.path and change.path or None,
+                                      None,
+                                      ['-b', '-B'])
             diff_fp = diffobj.get_pipe()
             plus, minus = _get_diff_counts(diff_fp)
 
