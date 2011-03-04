@@ -405,7 +405,12 @@ class CheckinDatabase:
                 match = " REGEXP "
             elif query_entry.match == "notregex":
                 match = " NOT REGEXP "
-            sqlList.append("%s%s%s" % (field, match, self.db.literal(data)))
+            elif query_entry.match == "in":
+                # now used only for repository type selection (viewvc.py/view_query)
+                match = ''
+                sqlList.append(field+' IN ('+string.join(map(lambda x: self.db.literal(x), data), ',')+')')
+            if match != '':
+              sqlList.append("%s%s%s" % (field, match, self.db.literal(data)))
 
         return "(%s)" % (string.join(sqlList, " OR "))
 
