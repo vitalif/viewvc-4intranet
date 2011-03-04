@@ -393,10 +393,14 @@ class CheckinDatabase:
             elif query_entry.match == "like":
                 match = " LIKE "
             elif query_entry.match == "glob":
-                match = " REGEXP "
-                # use fnmatch to translate the glob into a regexp
-                data = fnmatch.translate(data)
-                if data[0] != '^': data = '^' + data
+                # check if the match is exact
+                if not re.match(r'(\*|\?|\[.*\])', data):
+                    match = "="
+                else:
+                    # use fnmatch to translate the glob into a regexp
+                    data = fnmatch.translate(data)
+                    match = " REGEXP "
+                    if data[0] != '^': data = '^' + data
             elif query_entry.match == "regex":
                 match = " REGEXP "
             elif query_entry.match == "notregex":
