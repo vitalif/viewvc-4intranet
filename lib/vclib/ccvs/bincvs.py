@@ -22,6 +22,7 @@ import string
 import re
 import time
 import cvsdb
+import socket
 
 # ViewVC libs
 import compat
@@ -310,7 +311,17 @@ class BinCVSRepository(BaseCVSRepository):
     return filtered_revs
 
   def rcs_popen(self, rcs_cmd, rcs_args, mode, capture_err=1):
-    if self.utilities.cvsnt:
+    a = []
+    if self.utilities.rcsfile_socket:
+      a = self.utilities.rcsfile_socket.split(':')
+    if len(a) == 2:
+      s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      s.connect((a[0], int(a[1])))
+      s = s.makefile()
+      s.write('\''+rcs_cmd+'\' \''+'\' \''.join(rcs_args)+"\'\x0d\x0a")
+      s.flush()
+      return s
+    elif self.utilities.cvsnt:
       cmd = self.utilities.cvsnt
       args = ['rcsfile', rcs_cmd]
       args.extend(list(rcs_args))

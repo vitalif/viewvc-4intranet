@@ -254,6 +254,7 @@ class Config:
       self.utilities.cvsnt = 'cvs'
     else:
       self.utilities.cvsnt = None
+    self.utilities.rcsfile_socket = ''
     self.utilities.svn = ''
     self.utilities.diff = ''
     self.utilities.cvsgraph = ''
@@ -351,7 +352,7 @@ class IllegalOverrideSection(ViewVCConfigurationError):
   def __str__(self):
     return "malformed configuration: illegal %s override section: %s" \
            % (self.override_type, self.section_name)
-  
+
 class MalformedRoot(ViewVCConfigurationError):
   def __init__(self, config_name, value_given):
     Exception.__init__(self, config_name, value_given)

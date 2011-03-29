@@ -232,6 +232,21 @@ cvsnt =
 # cvsnt = K:\Program Files\cvsnt\cvs.exe
 # cvsnt = = /usr/bin/cvs
 
+# ViewVC can use an inetd service instead of local "cvsnt rcsfile"
+# This is recommended for all UNIX installations which use cvsnt,
+# as there is an unpleasant non-stable bug, probably somewhere
+# inside mod_python or Apache, which SOMETIMES causes cvsnt subprocesses forked
+# from mod_python to die. This gives empty diff outputs or different errors like
+# "Error: Rlog output ended early. Expected RCS file ..."
+# This script removes forking from mod_python code and solves the issue.
+# Additional profit of this script is that you can probably browse REMOTE cvs
+# repositories, if you expose this service to ViewVC, although it is not tested.
+
+# See also bin/cvsnt-rcsfile-inetd.pl
+
+#rcsfile_socket = 'host:port'
+# Example: rcsfile_socket = '127.0.0.1:8071'
+
 # Subversion command-line client, used for viewing Subversion repositories
 svn =
 # svn = /usr/bin/svn
