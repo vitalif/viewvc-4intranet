@@ -13,10 +13,11 @@
 import vcauth
 import vclib
 import string
+import debug
 
 class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
-  """A 'union' authorizer: it makes possible to use one authorizer for
-     one root and other authorizer for other roots."""
+  """A 'union' authorizer: it makes possible to use different authorizers
+     for different roots."""
 
   def __init__(self, username, params={}):
     self.username = username
@@ -45,10 +46,7 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
         fp, path, desc = imp.find_module(aname, vcauth.__path__)
         my_auth = imp.load_module('viewvc', fp, path, desc)
       except ImportError:
-        raise debug.ViewVCException(
-          'Invalid authorizer (%s) specified for root "%s"' \
-          % (self.cfg.options.authorizer, rootname),
-          '500 Internal Server Error')
+        raise
     finally:
       if fp:
         fp.close()

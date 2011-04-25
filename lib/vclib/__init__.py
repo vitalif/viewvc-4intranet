@@ -413,7 +413,7 @@ def check_root_access(repos):
   if not auth:
     return 1
   return auth.check_root_access(repos.rootname())
-  
+
 def check_path_access(repos, path_parts, pathtype=None, rev=None):
   """Return 1 iff the associated username is permitted to read
   revision REV of the path PATH_PARTS (of type PATHTYPE) in repository
