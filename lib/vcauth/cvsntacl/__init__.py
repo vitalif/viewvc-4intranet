@@ -13,11 +13,10 @@
 import vcauth
 import vclib
 import string
-from xml.dom.ext.reader import Sax2
-from xml import xpath
+from xml.dom.minidom import parse
 
 class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
-  """An authorizer making use of CVSnt access control lists (which are in form
+  """An authorizer which uses CVSnt access control lists (which are in form
      of XML files in CVS/ subdirectories in the repository)."""
 
   def __init__(self, username, params={}):
@@ -28,21 +27,27 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
     self.cached = {}
     self.xmlcache = {}
 
-  def checkr(self, element, paths):
-    r = None
-    for p in paths:
-      nodes = xpath.Evaluate(p, element)
-      if nodes and len(nodes):
-        for c in nodes:
-          if c.nodeName == 'read' and r is None:
-            r = True
-            if c.attributes and len(c.attributes):
-              for a in c.attributes:
-                if a.nodeName == 'deny':
-                  r = not a.value
-      if r is not None:
-        break
-    return r
+  def dom_rights(self, doc, rightname, filename, username):
+    result = None
+    if filename:
+      for node in doc.getElementsByTagName('file'):
+        if node.getAttribute('name') == filename:
+          for acl in node.getElementsByTagName('acl'):
+            if not acl.getAttribute('branch'):
+              u = acl.getAttribute('user')
+              if result is None and (not u or u == 'anonymous') or u == username:
+                for r in acl.getElementsByTag(rightname):
+                  result = not r.getAttribute('deny')
+          break
+    if result is None:
+      for node in doc.getElementsByTagName('directory'):
+        for acl in node.getElementsByTagName('acl'):
+          if not acl.getAttribute('branch'):
+            u = acl.getAttribute('user')
+            if result is None and (not u or u == 'anonymous') or u == username:
+              for r in acl.getElementsByTag(rightname):
+                result = not r.getAttribute('deny')
+    return result
 
   def check(self, rootname, path_parts, filename):
     d = self.cfg.general.cvs_roots.get(rootname,None)
@@ -58,24 +63,11 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
         xml = xml + '/CVS/fileattr.xml'
         if self.cached.get(xml, None) is not None:
           return self.cached.get(xml, None)
-	doc = self.xmlcache.get(xml, None)
-	if doc is None:
-          fp = open(xml, 'rb')
-          doc = Sax2.Reader().fromStream(fp)
-          fp.close()
-	  self.xmlcache[xml] = doc
-        if filename:
-          r = self.checkr(doc.documentElement, [
-            '/fileattr/file[@name=\'%s\']/acl[@user=\'%s\' and not(@branch)]/read' % (filename, self.username),
-            '/fileattr/file[@name=\'%s\']/acl[not(@user) and not(@branch)]/read' % filename,
-            '/fileattr/directory/acl[@user=\'%s\' and not(@branch)]/read' % self.username,
-            '/fileattr/directory/acl[not(@user) and not(@branch)]/read'
-          ] )
-        else:
-          r = self.checkr(doc.documentElement, [
-            '/fileattr/directory/acl[@user=\'%s\' and not(@branch)]/read' % self.username,
-            '/fileattr/directory/acl[not(@user) and not(@branch)]/read'
-          ] )
+        doc = self.xmlcache.get(xml, None)
+        if doc is None:
+          doc = parse(xml)
+          self.xmlcache[xml] = doc
+        r = self.dom_rights(doc, 'read', filename, self.username)
         if r is not None:
           self.cached[xml] = r
           return r
