@@ -14,6 +14,7 @@ import time
 import datetime
 import urllib2
 import anyjson
+import random
 
 import ga_config
 
@@ -31,6 +32,7 @@ gac = {
   'ga_always_require' : 0,
   'fof_sudo_server'   : '',
   'fof_sudo_cookie'   : 'fof_sudo_id',
+  'gc_probability'    : 1000,
 }
 
 for i in gac:
@@ -42,6 +44,13 @@ def cachefn(key):
   key = re.sub('([^a-zA-Z0-9_\-]+)', lambda x: binascii.hexlify(x.group(1)), key)
   return gac['cache_dir']+'/'+key
 
+def cacheclean():
+  global gac
+  t = time.time()
+  for fn in os.listdir(gac['cache_dir']):
+    if t > os.stat(fn).st_mtime:
+      os.unlink(fn)
+
 def cacheset(key, value, expire = 86400):
   fn = cachefn(key)
   try:
@@ -49,10 +58,10 @@ def cacheset(key, value, expire = 86400):
     if not expire:
       expire = 86400
     expire = time.time()+expire
-    f.write(str(expire)+"\n")
     f.write(value)
     f.close()
-    os.chmod(fn,0600)
+    os.chmod(fn, 0600)
+    os.utime(fn, (expire, expire))
   except:
     raise
   return 1
@@ -61,10 +70,9 @@ def cacheget(key):
   fn = cachefn(key)
   try:
     f = open(fn,'r')
-    expire = f.readline()
     value = f.read()
     f.close()
-    if time.time() > float(expire):
+    if time.time() > os.stat(fn).st_mtime:
       os.unlink(fn)
       return ''
     return value
@@ -175,6 +183,8 @@ def set_env_user(req, r_data):
 
 def globalauth_handler(req, jar, v):
   global gac
+  if random.randint(1, gac['gc_probability']) == 1:
+    cacheclean()
   r_id = jar.get(gac['cookie_name'], '')
   if r_id:
     r_id = r_id.value
