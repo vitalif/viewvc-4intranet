@@ -14,7 +14,6 @@ import os
 import sys
 import string
 import time
-import fnmatch
 import re
 
 import vclib
@@ -397,10 +396,11 @@ class CheckinDatabase:
                 if not re.match(r'(\*|\?|\[.*\])', data):
                     match = "="
                 else:
-                    # use fnmatch to translate the glob into a regexp
-                    data = fnmatch.translate(data)
-                    match = " REGEXP "
-                    if data[0] != '^': data = '^' + data
+                    data = data.replace('%', '\\%')
+                    data = data.replace('_', '\\_')
+                    data = data.replace('*', '%')
+                    data = data.replace('?', '_')
+                    match = " LIKE "
             elif query_entry.match == "regex":
                 match = " REGEXP "
             elif query_entry.match == "notregex":

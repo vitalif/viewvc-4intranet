@@ -184,6 +184,10 @@ class SvnRev:
                                       ['-b', '-B'])
             diff_fp = diffobj.get_pipe()
             plus, minus = _get_diff_counts(diff_fp)
+            # TODO Indexing file contents
+            # For binary files: svn.fs.contents_changed(root1, path1, root2, path2)
+            # Temp file with contents is at: diffobj.tempfile2
+            # Apache Tika server may even be at another host!
 
             # CustIS Bug 50473: a workaround for svnlib behaviour in file movements (FILE1 -> FILE2 + FILE1 -> null)
             if change.base_path:
