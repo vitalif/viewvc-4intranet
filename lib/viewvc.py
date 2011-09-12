@@ -1443,6 +1443,8 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
                                 get_lexer_by_name, \
                                 get_lexer_for_mimetype, \
                                 get_lexer_for_filename
+    from pygments.lexers._mapping import LEXERS
+    LEXERS['BashLexer'] = ('pygments.lexers.other', 'Bash', ('bash', 'sh'), ('*.sh',), ('application/x-sh', 'application/x-shellscript', 'text/x-sh', 'text/x-shellscript'))
     encoding = 'guess'
     if cfg.options.detect_encoding:
       try:
