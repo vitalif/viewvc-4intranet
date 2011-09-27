@@ -46,7 +46,14 @@ class ContentMagic:
                 charset = chardet.detect(content)
                 if charset and charset['encoding']:
                     charset = charset['encoding']
-                content = content.decode(charset)
+                if charset == 'MacCyrillic':
+                    # Silly MacCyr, try cp1251
+                    try:
+                        content = content.decode('windows-1251')
+                        charset = 'windows-1251'
+                    except: content = content.decode(charset)
+                else:
+                    content = content.decode(charset)
             except: charset = None
         else:
             # Try UTF-8
