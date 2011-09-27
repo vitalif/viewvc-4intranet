@@ -58,7 +58,11 @@ else:
 
 import os
 import string
+import socket
+import select
 import re
+import mimetypes
+import time
 
 import svn.core
 import svn.repos
@@ -68,14 +72,20 @@ import svn.delta
 import cvsdb
 import viewvc
 import vclib
+from viewvcmagic import ContentMagic
 
 class SvnRepo:
     """Class used to manage a connection to a SVN repository."""
-    def __init__(self, path):
+    def __init__(self, path, index_content = None, tika_client = None, guesser = None,
+                 svn_ignore_mimetype = False):
         self.path = path
         self.repo = svn.repos.svn_repos_open(path)
         self.fs = svn.repos.svn_repos_fs(self.repo)
         self.rev_max = svn.fs.youngest_rev(self.fs)
+        self.index_content = index_content
+        self.tika_client = tika_client
+        self.guesser = guesser
+        self.svn_ignore_mimetype = svn_ignore_mimetype
     def __getitem__(self, rev):
         if rev is None:
             rev = self.rev_max
@@ -128,6 +138,74 @@ def _get_diff_counts(diff_fp):
         line = diff_fp.readline()
     return plus, minus
 
+class TikaClient:
+    # Create tika client
+    def __init__(self, tika_server, mime_types):
+        self.tika_server = tika_server
+        self.mime_types = mime_types
+        self.addr = tika_server.split(':')
+        # Split address
+        if len(self.addr) != 2:
+            raise Exception('tika_server value is incorrect: \''+tika_server+'\', please use \'host:port\' format')
+        self.addr = (self.addr[0], int(self.addr[1]))
+        # Build regexp for MIME types
+        m = re.split('\s+', mime_types.strip())
+        self.mime_regexp = re.compile('|'.join('^'+re.escape(i).replace('\\*', '.*')+'$' for i in m))
+
+    # Extract text content from file using Tika which runs in server mode
+    def get_text(self, filename, mime_type, log_filename):
+        if not self.mime_regexp.match(mime_type):
+            # Tika can't handle this mime type, return nothing
+            return ''
+        fd = None
+        s = None
+        text = ''
+        fsize = 0
+        try:
+            # Read original file
+            fd = open(filename, 'rb')
+            data = fd.read()
+            fsize = len(data)
+            if not fsize:
+                return ''
+            # Connect to Tika
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect(self.addr)
+            s.setblocking(0)
+            sockfd = s.fileno()
+            # Tika is somewhat delicate about network IO, so:
+            # Read and write using poll(2) system call
+            p = select.poll()
+            p.register(sockfd)
+            while 1:
+                fds = p.poll()
+                if not fds:
+                    break
+                (pollfd, event) = fds[0]
+                if event & select.POLLIN:
+                    # Exception or empty data means EOF...
+                    try: part = os.read(sockfd, 65536)
+                    except: break
+                    if not part: break
+                    text += part
+                if event & select.POLLOUT:
+                    if not len(data):
+                        # Shutdown output and forget about POLLOUT
+                        s.shutdown(socket.SHUT_WR)
+                        p.modify(sockfd, select.POLLIN)
+                    else:
+                        # Write and consume some data
+                        l = os.write(sockfd, data)
+                        data = data[l:]
+            if len(text) == 0:
+                raise Exception('Empty response from Tika server')
+            print "Extracted %d bytes from %s (%s) of size %d" % (len(text), log_filename, mime_type, fsize)
+        except Exception, e:
+            print "Error extracting text from %s (%s) of size %d: %s" % (log_filename, mime_type, fsize, str(e))
+        finally:
+            if fd: fd.close()
+            if s: s.close()
+        return text
 
 class SvnRev:
     """Class used to hold information about a particular revision of
@@ -151,7 +229,7 @@ class SvnRev:
 
         # get a root for the current revisions
         fsroot = self._get_root_for_rev(rev)
-        
+
         # find changes in the revision
         editor = svn.repos.RevisionChangeCollector(repo.fs, rev)
         e_ptr, e_baton = svn.delta.make_editor(editor)
@@ -168,7 +246,7 @@ class SvnRev:
             base_root = None
             if change.base_path:
                 base_root = self._get_root_for_rev(change.base_rev)
-                
+
             if not change.path:
                 action = 'remove'
             elif change.added:
@@ -184,19 +262,53 @@ class SvnRev:
                                       ['-b', '-B'])
             diff_fp = diffobj.get_pipe()
             plus, minus = _get_diff_counts(diff_fp)
-            # TODO Indexing file contents
-            # For binary files: svn.fs.contents_changed(root1, path1, root2, path2)
-            # Temp file with contents is at: diffobj.tempfile2
-            # Apache Tika server may even be at another host!
 
             # CustIS Bug 50473: a workaround for svnlib behaviour in file movements (FILE1 -> FILE2 + FILE1 -> null)
             if change.base_path:
-                if not change.path and changes_hash.get(change.base_path, '') != '':
+                if not change.path and change.base_path in changes_hash:
                     minus = 0
                 elif change.path:
                     changes_hash[change.base_path] = change.path
 
-            self.changes.append((path, action, plus, minus))
+            content = ''
+            mime = ''
+            # need to check if binary file's content changed when copying,
+            # if not, don't extract it, just get it from previous revision later
+            if repo.index_content and change.path and (not change.base_path
+                or svn.fs.contents_changed(
+                    base_root and base_root or None,
+                    base_root and change.base_path or None,
+                    fsroot, change.path
+                )):
+                    props = svn.fs.node_proplist(fsroot, change.path)
+                    if not repo.svn_ignore_mimetype:
+                        mime = props.get('svn:mime-type', None)
+                    else:
+                        mime = None
+                    mime = repo.guesser.guess_mime(
+                        mime,
+                        os.path.basename(change.path),
+                        diffobj.tempfile2
+                    )
+                    # Read and guess charset by ourselves for text files
+                    if mime.startswith('text/') or (mime.startswith('application/') and mime.endswith('xml')):
+                        try:
+                            fd = open(diffobj.tempfile2, 'rb')
+                            content = fd.read()
+                            fd.close()
+                        except: pass
+                        # Guess charset
+                        if content:
+                            content, charset = repo.guesser.guess_charset(content)
+                            if charset:
+                                content = content.encode('utf-8')
+                                print 'Guessed %s for %s' % (charset, change.path)
+                            else:
+                                print 'Failed to guess charset for %s, not indexing' % (change.path, )
+                    # Try to extract content using Tika from binary documents
+                    elif repo.tika_client:
+                        content = repo.tika_client.get_text(diffobj.tempfile2, mime, change.path)
+            self.changes.append((path, action, plus, minus, content, mime))
 
     def _get_root_for_rev(self, rev):
         """Fetch a revision root from a cache of such, or a fresh root
@@ -217,7 +329,7 @@ def handle_revision(db, command, repo, rev, verbose, force=0):
         if verbose: print "skipped (no changes)."
         return
 
-    for (path, action, plus, minus) in revision.changes:
+    for (path, action, plus, minus, content, mime) in revision.changes:
         directory, file = os.path.split(path)
         commit = cvsdb.CreateCommit()
         commit.SetRepository(repo.path)
@@ -230,6 +342,8 @@ def handle_revision(db, command, repo, rev, verbose, force=0):
         commit.SetPlusCount(plus)
         commit.SetMinusCount(minus)
         commit.SetBranch(None)
+        commit.SetContent(content)
+        commit.SetMimeType(mime)
 
         if action == 'add':
             commit.SetTypeAdd()
@@ -268,7 +382,16 @@ def main(command, repository, revs=[], verbose=0, force=0):
                 sys.stderr.write("ERROR: " + str(e) + "\n")
                 sys.exit(1)
 
-    repo = SvnRepo(repository)
+    tika_client = None
+    if cfg.utilities.tika_server:
+        tika_client = TikaClient(cfg.utilities.tika_server, cfg.utilities.tika_mime_types)
+    repo = SvnRepo(
+        path = repository,
+        index_content = cfg.cvsdb.index_content,
+        tika_client = tika_client,
+        guesser = cfg.guesser(),
+        svn_ignore_mimetype = cfg.options.svn_ignore_mimetype,
+    )
     if command == 'rebuild' or (command == 'update' and not revs):
         for rev in range(repo.rev_max+1):
             handle_revision(db, command, repo, rev, verbose)
@@ -312,7 +435,7 @@ Usage: 1. %s [-v] rebuild REPOS-PATH
     the database.  If a range is specified, the revisions will be
     processed in ascending order, and you may specify "HEAD" to
     indicate "the youngest revision currently in the repository".
-    
+
 3.  Purge information specific to the repository located at REPOS-PATH
     from the database.
 
@@ -337,7 +460,7 @@ if __name__ == '__main__':
         del args[index]
     except ValueError:
         pass
-        
+
     if len(args) < 3:
         usage()
 

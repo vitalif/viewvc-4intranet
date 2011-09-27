@@ -44,6 +44,7 @@ CREATE TABLE branches (
 
 DROP TABLE IF EXISTS checkins;
 CREATE TABLE checkins (
+  id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
   type enum('Change','Add','Remove'),
   ci_when datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
   whoid mediumint(9) DEFAULT '0' NOT NULL,
@@ -57,7 +58,7 @@ CREATE TABLE checkins (
   removedlines int(11) DEFAULT '0' NOT NULL,
   descid mediumint(9),
   UNIQUE repositoryid (repositoryid,dirid,fileid,revision),
-  KEY repository_when (repositoryid,ci_when),
+  KEY repositoryid_when (repositoryid,ci_when),
   KEY ci_when (ci_when),
   KEY whoid (whoid,ci_when),
   KEY dirid (dirid),
@@ -138,6 +139,7 @@ CREATE TABLE branches (
 
 DROP TABLE IF EXISTS commits;
 CREATE TABLE commits (
+  id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
   type enum('Change','Add','Remove'),
   ci_when datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
   whoid mediumint(9) DEFAULT '0' NOT NULL,
@@ -151,9 +153,9 @@ CREATE TABLE commits (
   removedlines int(11) DEFAULT '0' NOT NULL,
   descid mediumint(9),
   UNIQUE repositoryid (repositoryid,dirid,fileid,revision),
+  KEY repositoryid_when (repositoryid,ci_when),
   KEY ci_when (ci_when),
-  KEY whoid (whoid),
-  KEY repositoryid_2 (repositoryid),
+  KEY whoid (whoid,ci_when),
   KEY dirid (dirid),
   KEY fileid (fileid),
   KEY branchid (branchid),
@@ -253,7 +255,7 @@ Options:
                       [Default: ViewVC]
 
   --help              Show this usage message.
-  
+
   --hostname=ARG      Use ARG as the hostname for the MySQL connection.
                       [Default: localhost]
 
@@ -264,7 +266,7 @@ Options:
   --version=ARG       Create the database using the schema employed by
                       version ARG of ViewVC.  Valid values are:
                       [ "1.0" ]
-                            
+
 """ % (os.path.basename(sys.argv[0])))
   if errmsg is not None:
     stream.write("[ERROR] %s.\n" % (errmsg))

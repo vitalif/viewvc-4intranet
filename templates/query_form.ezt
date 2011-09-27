@@ -144,7 +144,7 @@ Browse Directory</a></p>
   <tr>
     <th style="text-align:right;vertical-align:top;">Comment:</th>
     <td>
-      <input type="text" name="comment" value="[comment]" /><br />
+      <input type="text" name="comment" value="[comment]" size="40" /><br />
       <label for="comment_match_exact">
         <input type="radio" name="comment_match" id="comment_match_fulltext"
            value="fulltext" [is comment_match "fulltext"]checked=""[end] />
@@ -172,13 +172,21 @@ Browse Directory</a></p>
       </label>
     </td>
   </tr>
+  [if-any enable_search_content]
+  <tr>
+    <th style="text-align:right;vertical-align:top;">Search content:</th>
+    <td><input type="text" name="search_content" value="[search_content]" size="60" /></td>
+  </tr>
+  [end]
   <tr>
     <th style="text-align:right;vertical-align:top;">Sort By:</th>
     <td>
       <select name="querysort">
         <option value="date" [is querysort "date"]selected="selected"[end]>Date</option>
+        <option value="date_rev" [is querysort "date_rev"]selected="selected"[end]>Date (oldest first)</option>
         <option value="author" [is querysort "author"]selected="selected"[end]>Author</option>
         <option value="file" [is querysort "file"]selected="selected"[end]>File</option>
+        <option value="relevance" [is querysort "relevance"]selected="selected"[end]>Relevance</option>
       </select>
     </td>
   </tr>

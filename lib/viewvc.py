@@ -1,4 +1,3 @@
-#
 # Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
@@ -68,7 +67,6 @@ docroot_magic_path = '*docroot*'
 viewcvs_mime_type = 'text/vnd.viewcvs-markup'
 alt_mime_type = 'text/x-cvsweb-markup'
 view_roots_magic = '*viewroots*'
-magic_buf_size = 4096
 default_mime_type = 'application/octet-stream'
 
 # Put here the variables we need in order to hold our state - they
@@ -121,9 +119,8 @@ class Request:
     # check for an authenticated username
     self.username = server.getenv('REMOTE_USER')
 
-    # construct MIME magic
-    self.ms = None
-    self.ms_fail = 0
+    # repository object cache
+    self.all_repos = {}
 
     # if we allow compressed output, see if the client does too
     self.gzip_compress_level = 0
@@ -133,6 +130,9 @@ class Request:
                           map(lambda x: string.strip(x),
                               string.split(http_accept_encoding, ","))):
         self.gzip_compress_level = 9  # make this configurable?
+
+  def utf8(self, value):
+    return self.cfg.guesser().utf8(value)
 
   def create_repos(self, rootname):
     if not rootname:
@@ -677,7 +677,7 @@ def _validate_mimetype(value):
   return value in (viewcvs_mime_type, alt_mime_type, 'text/plain')
 
 # obvious things here. note that we don't need uppercase for alpha.
-_re_validate_alpha = re.compile('^[a-z]+$')
+_re_validate_alpha = re.compile('^[a-z_]+$')
 _re_validate_number = re.compile('^[0-9]+$')
 _re_validate_boolint = re.compile('^[01]$')
 
@@ -743,6 +743,7 @@ _legal_params = {
   'who_match'     : _re_validate_alpha,
   'comment'       : None,
   'comment_match' : _re_validate_alpha,
+  'search_content': None,
   'querysort'     : _re_validate_alpha,
   'date'          : _re_validate_alpha,
   'hours'         : _re_validate_number,
@@ -988,7 +989,7 @@ def nav_path(request):
     is_last = len(path_parts) == len(request.path_parts)
 
     if request.roottype == 'cvs':
-      item = _item(name=cvsdb.utf8string(part), href=None)
+      item = _item(name=request.utf8(part), href=None)
     else:
       item = _item(name=part, href=None)
 
@@ -1248,7 +1249,7 @@ def common_template_data(request, revision=None, mime_type=None):
   cfg = request.cfg
   where = request.where
   if request.roottype == 'cvs':
-    where = cvsdb.utf8string(where)
+    where = request.utf8(where)
   where = request.server.escape(where)
 
   # Initialize data dictionary members (sorted alphanumerically)
@@ -1444,27 +1445,30 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
                                 get_lexer_for_mimetype, \
                                 get_lexer_for_filename
     from pygments.lexers._mapping import LEXERS
+    # Hack for shell mime types:
     LEXERS['BashLexer'] = ('pygments.lexers.other', 'Bash', ('bash', 'sh'), ('*.sh',), ('application/x-sh', 'application/x-shellscript', 'text/x-sh', 'text/x-shellscript'))
-    encoding = 'guess'
-    if cfg.options.detect_encoding:
-      try:
-        import chardet
-        encoding = 'chardet'
-      except (SyntaxError, ImportError):
-        pass
     try:
       lexer = get_lexer_for_mimetype(mime_type,
-                                     encoding=encoding,
+                                     encoding='utf-8',
                                      stripnl=False)
     except ClassNotFound:
       try:
         lexer = get_lexer_for_filename(filename,
-                                       encoding=encoding,
+                                       encoding='utf-8',
                                        stripnl=False)
       except ClassNotFound:
         use_pygments = 0
   except ImportError:
     use_pygments = 0
+
+  # Detect encoding by calling chardet ourselves,
+  # to support it in non-highlighting mode
+  content = fp.read()
+  c, encoding = cfg.guesser().guess_charset(content)
+  if encoding:
+    content = c
+  else:
+    encoding = 'unknown'
 
   # If we aren't going to be highlighting anything, just return the
   # BLAME_SOURCE.  If there's no blame_source, we'll generate a fake
@@ -1475,11 +1479,7 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
     else:
       lines = []
       line_no = 0
-      while 1:
-        line = fp.readline()
-        if not line:
-          break
-        line = cvsdb.utf8string(line)
+      for line in content.split('\n'):
         line_no = line_no + 1
         item = vclib.Annotation(cgi.escape(line), line_no,
                                 None, None, None, None)
@@ -1508,19 +1508,11 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
         self.blame_data.append(item)
       self.line_no = self.line_no + 1
   ps = PygmentsSink(blame_source)
-  fpd = fp.read()
-  try:
-    fpdat = unicode(fpd,'utf-8')
-  except:
-    try:
-      fpdat = unicode(fpd,'cp1251')
-    except:
-      fpdat = fpd
-  highlight(fpdat, lexer,
+  highlight(content, lexer,
             HtmlFormatter(nowrap=True,
                           classprefix='pygments-',
                           encoding='utf-8'), ps)
-  return ps.blame_data
+  return ps.blame_data, encoding
 
 def make_time_string(date, cfg):
   """Returns formatted date string in either local time or UTC.
@@ -1594,6 +1586,7 @@ def calculate_mime_type(request, path_parts, rev):
         return mime_type
     except:
       pass
+  # FIXME rewrite to use viewvcmagic
   return guess_mime(path_parts[-1])
 
 def markup_or_annotate(request, is_annotate):
@@ -1605,21 +1598,12 @@ def markup_or_annotate(request, is_annotate):
   mime_type = calculate_mime_type(request, path, rev)
 
   if not mime_type or mime_type == default_mime_type:
-    if request.ms is None and not request.ms_fail:
-      try:
-        import magic
-        request.ms = magic.open(magic.MAGIC_NONE | magic.MAGIC_MIME)
-        request.ms.load()
-      except:
-        request.ms_fail = 1
-    if request.ms:
-      try:
-        fp, revision = request.repos.openfile(path, rev)
-        buffer = fp.read(magic_buf_size)
-        fp.close()
-        mime_type = request.ms.buffer(buffer)
-      except:
-        pass
+    try:
+      fp, revision = request.repos.openfile(path, rev)
+      mime_type = request.cfg.guesser().guess_mime(None, None, fp)
+      fp.close()
+    except:
+      raise
 
   # Is this a binary type?
   if is_binary(request.cfg, mime_type):
@@ -1657,9 +1641,10 @@ def markup_or_annotate(request, is_annotate):
     if check_freshness(request, None, revision, weak=1):
       fp.close()
       return
-    lines = markup_stream_pygments(request, cfg, blame_source, fp,
-                                   path[-1], mime_type)
+    lines, charset = markup_stream_pygments(request, cfg, blame_source, fp, path[-1], mime_type)
     fp.close()
+    if mime_type.find(';') < 0:
+      mime_type = mime_type+'; charset='+charset
 
   data = common_template_data(request, revision)
   data.merge(ezt.TemplateData({
@@ -1910,7 +1895,7 @@ def view_directory(request):
       row.short_log = format_log(file.log, cfg)
       row.log = htmlify(file.log, cfg.options.mangle_email_addresses)
     row.lockinfo = file.lockinfo
-    row.name = request.server.escape(cvsdb.utf8string(file.name))
+    row.name = request.server.escape(request.utf8(file.name))
     row.anchor = row.name
     row.pathtype = (file.kind == vclib.FILE and 'file') or \
                    (file.kind == vclib.DIR and 'dir')
@@ -2285,7 +2270,7 @@ def view_log(request):
       entry.ago = html_time(request, rev.date, 1)
     entry.log = rev.log or ""
     if cvs:
-      entry.log = cvsdb.utf8string(entry.log)
+      entry.log = request.utf8(entry.log)
     entry.log = htmlify(entry.log, cfg.options.mangle_email_addresses)
     entry.size = rev.size
     entry.lockinfo = rev.lockinfo
@@ -2770,7 +2755,7 @@ class DiffSource:
     self.save_line = None
     self.line_number = None
     self.prev_line_number = None
-    
+
     # keep track of where we are during an iteration
     self.idx = -1
     self.last = None
@@ -2867,7 +2852,7 @@ class DiffSource:
 
     diff_code = line[0]
     output = self._format_text(line[1:])
-    output = cvsdb.utf8string(output)
+    output = self.cfg.guesser().utf8(output)
 
     if diff_code == '+':
       if self.state == 'dump':
@@ -3644,6 +3629,7 @@ def view_queryform(request):
     'who_match' : request.query_dict.get('who_match', 'exact'),
     'comment' : request.query_dict.get('comment', ''),
     'comment_match' : request.query_dict.get('comment_match', 'fulltext'),
+    'search_content' : request.query_dict.get('search_content', ''),
     'querysort' : request.query_dict.get('querysort', 'date'),
     'date' : request.query_dict.get('date', 'hours'),
     'hours' : request.query_dict.get('hours', '2'),
@@ -3653,6 +3639,7 @@ def view_queryform(request):
     'query_hidden_values' : query_hidden_values,
     'limit_changes' : limit_changes,
     'dir_href' : dir_href,
+    'enable_search_content' : request.cfg.cvsdb.index_content,
   }))
 
   generate_page(request, "query_form", data)
@@ -3791,7 +3778,8 @@ def build_commit(request, files, max_files, dir_strip, format):
   plus_count = 0
   minus_count = 0
   found_unreadable = 0
-  all_repos = {}
+  if not request.all_repos:
+    request.all_repos = {}
 
   for f in files:
     dirname = f.GetDirectory()
@@ -3810,17 +3798,19 @@ def build_commit(request, files, max_files, dir_strip, format):
 
     # Check path access (since the commits database logic bypasses the
     # vclib layer and, thus, the vcauth stuff that layer uses).
-    my_repos = all_repos.get(f.GetRepository(), '')
+    my_repos = request.all_repos.get(f.GetRepository(), '')
     if not my_repos:
       try:
-        my_repos = all_repos[f.GetRepository()] = request.create_repos(f.GetRepository())
+        my_repos = request.all_repos[f.GetRepository()] = request.create_repos(f.GetRepository())
       except:
         my_repos = None
     if not my_repos:
       return None
     if my_repos['roottype'] == 'cvs':
-      try: where = unicode(where,'utf-8')
+      # we store UTF-8 in the DB
+      try: where = where.decode('utf-8')
       except: pass
+      # FIXME maybe store "real" filesystem path in the DB instead of having such setting?
       try: where = where.encode(cfg.options.cvs_ondisk_charset)
       except: pass
     path_parts = _path_parts(where)
@@ -3907,24 +3897,27 @@ def build_commit(request, files, max_files, dir_strip, format):
     if max_files and num_allowed > max_files:
       continue
 
-    commit_files.append(_item(date=commit_time,
-                              dir=request.server.escape(dirname),
-                              file=request.server.escape(filename),
-                              author=request.server.escape(f.GetAuthor()),
-                              rev=rev,
-                              branch=f.GetBranch(),
-                              plus=plus,
-                              minus=minus,
-                              type=change_type,
-                              dir_href=dir_href,
-                              log_href=log_href,
-                              view_href=view_href,
-                              download_href=download_href,
-                              prefer_markup=prefer_markup,
-                              diff_href=diff_href,
-                              root=my_repos,
-                              path=where,
-                              path_prev=path_prev))
+    commit_files.append(_item(
+      date=commit_time,
+      dir=request.server.escape(dirname),
+      file=request.server.escape(filename),
+      author=request.server.escape(f.GetAuthor()),
+      rev=rev,
+      branch=f.GetBranch(),
+      plus=plus,
+      minus=minus,
+      type=change_type,
+      snippet=f.GetSnippet(),
+      dir_href=dir_href,
+      log_href=log_href,
+      view_href=view_href,
+      download_href=download_href,
+      prefer_markup=prefer_markup,
+      diff_href=diff_href,
+      root=my_repos,
+      path=where,
+      path_prev=path_prev,
+    ))
 
   # No files survived authz checks?  Let's just pretend this
   # little commit didn't happen, shall we?
@@ -4115,6 +4108,7 @@ def view_query(request):
   who_match = request.query_dict.get('who_match', 'exact')
   comment = request.query_dict.get('comment', '')
   comment_match = request.query_dict.get('comment_match', 'fulltext')
+  search_content = request.query_dict.get('search_content', '')
   querysort = request.query_dict.get('querysort', 'date')
   date = request.query_dict.get('date', 'hours')
   hours = request.query_dict.get('hours', '2')
@@ -4126,7 +4120,7 @@ def view_query(request):
                                              cfg.options.limit_changes))
 
   match_types = { 'exact':1, 'like':1, 'glob':1, 'regex':1, 'notregex':1 }
-  sort_types = { 'date':1, 'author':1, 'file':1 }
+  sort_types = { 'date':1, 'date_rev':1, 'author':1, 'file':1, 'relevance':1 }
   date_types = { 'hours':1, 'day':1, 'week':1, 'month':1,
                  'all':1, 'explicit':1 }
 
@@ -4193,6 +4187,8 @@ def view_query(request):
       query.SetComment(comment, comment_match)
     else:
       query.SetTextQuery(comment)
+  if search_content:
+    query.SetContentQuery(search_content)
   query.SetSortMethod(querysort)
   if date == 'hours':
     query.SetFromDateHoursAgo(int(hours))

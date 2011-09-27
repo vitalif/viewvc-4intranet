@@ -24,6 +24,7 @@ import vclib.ccvs
 import vclib.svn
 import cvsdb
 import viewvc
+from viewvcmagic import ContentMagic
 
 #########################################################################
 #
@@ -47,6 +48,7 @@ class Config:
                         'root_parents', 'allowed_views', 'mime_types_files')
 
   def __init__(self):
+    self.__guesser = None
     for section in self._sections:
       setattr(self, section, _sub_config())
 
@@ -66,7 +68,6 @@ class Config:
     if rootname:
       self._process_root_options(self.parser, rootname)
     self.expand_root_parents()
-    cvsdb.setencs(self.options.encodings.split(':'))
     r = {}
     for i in self.rewritehtml.__dict__.keys():
       if i[-8:] == '.replace':
@@ -201,7 +202,7 @@ class Config:
           pass
         else:
           raise IllegalOverrideSection('root', section)
-          
+
   def overlay_root_options(self, rootname):
     "Overly per-root options atop the existing option set."
     if not self.conf_path:
@@ -217,7 +218,7 @@ class Config:
       for option in parser.options(section):
         d[option] = parser.get(section, option)
       return d.items()
-    
+
   def get_authorizer_params(self, authorizer, rootname=None):
     if not self.conf_path:
       return {}
@@ -236,7 +237,12 @@ class Config:
             params[key] = value
     params['__config'] = self
     return params
-  
+
+  def guesser(self):
+    if not self.__guesser:
+      self.__guesser = ContentMagic(self.options.encodings)
+    return self.__guesser
+
   def set_defaults(self):
     "Set some default values in the configuration."
 
@@ -258,6 +264,8 @@ class Config:
     self.utilities.svn = ''
     self.utilities.diff = ''
     self.utilities.cvsgraph = ''
+    self.utilities.tika_server = ''
+    self.utilities.tika_mime_types = ''
 
     self.options.root_as_url_component = 1
     self.options.checkout_magic = 0
@@ -302,7 +310,7 @@ class Config:
     self.options.limit_changes = 100
     self.options.cvs_ondisk_charset = 'cp1251'
     self.options.binary_mime_re = '^(?!text/|.*\Wxml)'
-    self.options.encodings = 'utf-8:cp1251:iso-8859-1'
+    self.options.encodings = 'cp1251:iso-8859-1'
 
     self.templates.diff = None
     self.templates.directory = None
@@ -316,6 +324,7 @@ class Config:
     self.templates.roots = None
 
     self.cvsdb.enabled = 0
+    self.cvsdb.index_content = 0
     self.cvsdb.host = ''
     self.cvsdb.port = 3306
     self.cvsdb.socket = ''
@@ -323,11 +332,16 @@ class Config:
     self.cvsdb.user = ''
     self.cvsdb.passwd = ''
     self.cvsdb.readonly_user = ''
-    self.cvsdb.readonly_passwd = '' 
+    self.cvsdb.readonly_passwd = ''
     self.cvsdb.row_limit = 1000
     self.cvsdb.rss_row_limit = 100
     self.cvsdb.check_database_for_root = 0
     self.cvsdb.fulltext_min_relevance = 0.2
+
+    self.cvsdb.sphinx_host = ''
+    self.cvsdb.sphinx_port = 3307
+    self.cvsdb.sphinx_socket = ''
+    self.cvsdb.sphinx_index = ''
 
 def _startswith(somestr, substr):
   return somestr[:len(substr)] == substr

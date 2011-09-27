@@ -1,6 +1,6 @@
 #---------------------------------------------------------------------------
 #
-# Configuration file for ViewVC
+# Configuration file for ViewVC (4IntraNet patched version)
 #
 # Information on ViewVC is located at the following web site:
 #     http://viewvc.org/
@@ -9,7 +9,7 @@
 
 # THE FORMAT OF THIS CONFIGURATION FILE
 #
-#    This file is delineated by sections, specified in [brackets].  Within 
+#    This file is delineated by sections, specified in [brackets].  Within
 #    each section, are a number of configuration settings.  These settings
 #    take the form of: name = value.  Values may be continued on the
 #    following line by indenting the continued line.
@@ -17,14 +17,14 @@
 #    WARNING:  Indentation *always* means continuation.  Name=value lines
 #    should always start in column zero.
 #
-#    Comments should always start in column zero, and are identified 
+#    Comments should always start in column zero, and are identified
 #    with "#".
 #
-#    Certain configuration settings may have multiple values.  These should 
-#    be separated by a comma.  The settings where this is allowed are noted 
+#    Certain configuration settings may have multiple values.  These should
+#    be separated by a comma.  The settings where this is allowed are noted
 #    below.  Any other setting that requires special syntax is noted at that
 #    setting.
-# 
+#
 #
 # SOME TERMINOLOGY USED HEREIN
 #
@@ -50,10 +50,10 @@
 #    recommend you pay attention to.  Of course, don't try to change the
 #    options here -- do so in the relevant section of the configuration
 #    file below.
-#    
+#
 #    For correct operation, you will probably need to change the following
 #    configuration variables:
-#   
+#
 #       cvs_roots (for CVS)
 #       svn_roots (for Subversion)
 #       root_parents (for CVS or Subversion)
@@ -62,18 +62,18 @@
 #       rcs_dir
 #       mime_types_file
 #       the many options in the [utilities] section
-#   
+#
 #    It is usually desirable to change the following variables:
-#   
+#
 #       address
 #       forbidden
-#   
+#
 #    To optimize delivery of ViewVC static files:
-#   
+#
 #       docroot
-#   
+#
 #    To customize the display of ViewVC for your site:
-#   
+#
 #       template_dir
 #       the [templates] override section
 #
@@ -139,7 +139,7 @@ default_root = cvs
 # provided only as a convenience for ViewVC installations which are
 # using the default template set, where the value of this option will
 # be displayed in the footer of every ViewVC page.)
-address = 
+address =
 
 #
 # This option provides a mechanism for custom key/value pairs to be
@@ -244,21 +244,47 @@ cvsnt =
 
 # See also bin/cvsnt-rcsfile-inetd.pl
 
-#rcsfile_socket = 'host:port'
-# Example: rcsfile_socket = '127.0.0.1:8071'
+#rcsfile_socket = host:port
+# Example: rcsfile_socket = 127.0.0.1:8071
 
 # Subversion command-line client, used for viewing Subversion repositories
 svn =
 # svn = /usr/bin/svn
 
 # GNU diff, used for showing file version differences
-diff = 
+diff =
 # diff = /usr/bin/diff
 
 # CvsGraph, a graphical CVS version graph generator (see options.use_cvsgraph)
 cvsgraph =
 # cvsgraph = /usr/local/bin/cvsgraph
 
+# Apache Tika TCP server host and port, used to extract text from binary documents
+# Note that as of 2011-09-12, Tika 0.9 has a bug which leads to hangups on processing
+# M$Word documents in server mode. So you must use the fixed version, downloaded from:
+# http://wiki.4intra.net/public/tika-app-0.9-fix-TIKA709.jar
+# (mirror) http://code.google.com/p/mediawiki4intranet/downloads/detail?name=tika-app-0.9-fix-TIKA709.jar
+# Or apply the patch by yourself and rebuild Tika from source, see patch here:
+# https://issues.apache.org/jira/browse/TIKA-709
+# Tika server should be started with command 'java -jar tika-app-0.9.jar -p PORT -t -eutf-8'
+
+#tika_server = host:port
+# Example: tika_server = 127.0.0.1:8072
+
+# This lists MIME types that can be processed by Tika
+# You may change it if your Tika is newer than 0.9 and supports more formats
+# (note) *+xml examples: xhtml+xml, rss+xml, atom+xml, docbook+xml, rdf+xml
+tika_mime_types =
+    text/*
+    application/*+xml
+    application/xml
+    application/vnd.oasis.opendocument.*
+    application/vnd.openxmlformats
+    application/vnd.ms-*
+    application/msaccess
+    application/msword
+    application/pdf
+    application/rtf
 
 #---------------------------------------------------------------------------
 [options]
@@ -358,7 +384,7 @@ svn_ignore_mimetype = 0
 # directory ViewVC should consult for various things, including cached
 # remote authentication credentials.  If unset, Subversion will use
 # the default location(s) ($HOME/.subversion, etc.)
-svn_config_dir = 
+svn_config_dir =
 
 # use the rcsparse Python module to retrieve CVS repository
 # information instead of invoking rcs utilities [EXPERIMENTAL]
@@ -494,12 +520,18 @@ short_log_len = 80
 # should we colorize known file content syntaxes?  (requires Pygments module)
 enable_syntax_coloration = 1
 
+# detect_encoding: Should we attempt to detect versioned file
+# character encodings?  [Requires 'chardet' module]
+# Used in file list, file content display and indexing
+# See also options.encodings for naive guessing.
+detect_encoding = 1
+
 # Use CvsGraph. See http://www.akhphd.au.dk/~bertho/cvsgraph/ for
-# documentation and download. 
+# documentation and download.
 use_cvsgraph = 0
 #use_cvsgraph = 1
 
-# Location of the customized cvsgraph configuration file.  
+# Location of the customized cvsgraph configuration file.
 cvsgraph_conf = cvsgraph.conf
 
 #
@@ -544,6 +576,17 @@ use_pagesize = 0
 # Set to 0 to disable the limit.
 limit_changes = 100
 
+# You can also use primitive charset guessing instead of chardet (options.detect_encoding)
+# Just set this to the list of possible charsets in your repository.
+# ViewVC will simply try to decode content using each of them, and pick
+# the first which succeeds. UTF-8 is always tried automatically.
+#encodings = cp1251:iso-8859-1
+
+# Sadly this is also required - for back-links from query results to files
+# in CVS, because it doesn't recode file names to UTF-8 as Subversion does.
+# Just set to cp1251 if you work with your CVS from Windowz.
+#cvs_ondisk_charset = cp1251
+
 #---------------------------------------------------------------------------
 [templates]
 
@@ -554,7 +597,7 @@ limit_changes = 100
 # use a different template for a particular view, simply uncomment the
 # appropriate option below and specify the currect location of the EZT
 # template file you wish to use for that view.
-# 
+#
 # Templates are specified relative to the configured template
 # directory (see the "template_dir" option), but absolute paths may
 # also be used as well.
@@ -569,13 +612,13 @@ limit_changes = 100
 #diff = diff.ezt
 #directory = directory.ezt
 ### an alternative directory view
-#directory = dir_new.ezt   
+#directory = dir_new.ezt
 #error = error.ezt
 #file = file.ezt
 #graph = graph.ezt
 #log = log.ezt
 ### a table-based alternative log view
-#log = log_table.ezt  
+#log = log_table.ezt
 #query = query.ezt
 #query_form = query_form.ezt
 #query_results = query_results.ezt
@@ -588,22 +631,51 @@ limit_changes = 100
 # Set to 1 to enable the database integration feature, 0 otherwise.
 enabled = 0
 
-# Database hostname and port.
+# Set to 1 to enable indexing of file contents using Sphinx and Tika
+index_content = 0
+
+# Database hostname, port, and socket
 #host = localhost
 #port = 3306
+# On Debian Linux, enable this:
+#socket = /var/run/mysqld/mysqld.sock
 
 # ViewVC database name.
 #database_name = ViewVC
 
 # Username and password of user with read/write privileges to the ViewVC
 # database.
-#user = 
-#passwd = 
+#user =
+#passwd =
 
 # Username and password of user with read privileges to the ViewVC
 # database.
-#readonly_user = 
-#readonly_passwd = 
+#readonly_user =
+#readonly_passwd =
+
+# ViewVC can use Sphinx (http://sphinxsearch.com) full-text search engine
+# to index file contents with full history and then search over them.
+# Also, Apache Tika console application can be used in TCP server mode to
+# add support for indexing binary documents (M$Word, PDF and etc).
+# See tika_server in [utilities].
+# Requires Sphinx >= 0.9.9 with a real-time updatable SphinxQL index.
+# Index must be created in sphinx.conf by hand and have the following fields:
+#  rt_field = content
+#  rt_attr_string = content
+#  rt_attr_string = mimetype
+#  rt_attr_timestamp = ci_when
+#  rt_attr_uint = whoid
+#  rt_attr_uint = repositoryid
+#  rt_attr_uint = dirid
+#  rt_attr_uint = fileid
+#  rt_attr_uint = revision
+#  rt_attr_uint = branchid
+
+# Sphinx connection parameters:
+#sphinx_host =
+#sphinx_port =
+#sphinx_socket = /var/run/sphinxql.sock
+#sphinx_index = viewvc
 
 # Limit the number of rows returned by a given query to this number.
 #row_limit = 1000
@@ -616,7 +688,7 @@ enabled = 0
 
 # Check if the repository is found in the database before showing
 # the query link and RSS feeds.  Set to 1 to enable check.
-# 
+#
 # WARNING: Enabling this check adds the cost of a database connection
 # and query to most ViewVC requests.  If all your roots are represented
 # in the commits database, or if you don't care about the creation of
@@ -640,7 +712,7 @@ enabled = 0
 #
 # ViewVC allows you to customize its configuration options for
 # individual virtual hosts.  You might, for example, wish to expose
-# all of your Subversion repositories at http://svn.yourdomain.com/viewvc/ 
+# all of your Subversion repositories at http://svn.yourdomain.com/viewvc/
 # and all your CVS ones at http://cvs.yourdomain.com/viewvc/, with no
 # cross-exposure.  Using ViewVC's virtual host (vhost) configuration
 # support, you can do this.  Simply create two vhost configurations
@@ -671,7 +743,7 @@ enabled = 0
 # gui = guiproject.yourdomain.*
 #
 # [vhost-libs/general]
-# cvs_roots = 
+# cvs_roots =
 # svn_roots = svnroot: /var/svn/libs-repos
 # default_root = svnroot
 #
@@ -680,7 +752,7 @@ enabled = 0
 #
 # [vhost-gui/general]
 # cvs_roots = cvsroot: /var/cvs/guiproject
-# svn_roots = 
+# svn_roots =
 # default_root = cvsroot
 #
 
@@ -697,7 +769,7 @@ enabled = 0
 #
 # Here is an example showing how to enable Subversion authz-based
 # authorization for only the single root named "svnroot":
-# 
+#
 # [root-svnroot/options]
 # authorizer = svnauthz
 #
@@ -726,7 +798,7 @@ enabled = 0
 #
 # Tests are case-sensitive.
 #
-# NOTE: Again, this is for the hiding of modules within repositories, *not* 
+# NOTE: Again, this is for the hiding of modules within repositories, *not*
 # for the hiding of repositories (roots) themselves.
 #
 # Some examples:
@@ -749,7 +821,7 @@ enabled = 0
 #    Allow "xml", forbid other modules starting with "x", and allow the rest:
 #       forbidden = !xml, x*, !*
 #
-forbidden = 
+forbidden =
 
 #---------------------------------------------------------------------------
 [authz-forbiddenre]
@@ -792,7 +864,7 @@ forbidden =
 #    Only allow visibility of HTML files and the directories that hold them:
 #       forbiddenre = !^([^/]+|.*(/|\.html))$
 #
-forbiddenre = 
+forbiddenre =
 
 #---------------------------------------------------------------------------
 [authz-svnauthz]
