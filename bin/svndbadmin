@@ -77,7 +77,7 @@ from viewvcmagic import ContentMagic
 class SvnRepo:
     """Class used to manage a connection to a SVN repository."""
     def __init__(self, path, index_content = None, tika_client = None, guesser = None,
-                 svn_ignore_mimetype = False):
+                 svn_ignore_mimetype = False, verbose = False):
         self.path = path
         self.repo = svn.repos.svn_repos_open(path)
         self.fs = svn.repos.svn_repos_fs(self.repo)
@@ -85,6 +85,7 @@ class SvnRepo:
         self.index_content = index_content
         self.tika_client = tika_client
         self.guesser = guesser
+        self.verbose = verbose
         self.svn_ignore_mimetype = svn_ignore_mimetype
     def __getitem__(self, rev):
         if rev is None:
@@ -140,9 +141,10 @@ def _get_diff_counts(diff_fp):
 
 class TikaClient:
     # Create tika client
-    def __init__(self, tika_server, mime_types):
+    def __init__(self, tika_server, mime_types, verbose):
         self.tika_server = tika_server
         self.mime_types = mime_types
+        self.verbose = verbose
         self.addr = tika_server.split(':')
         # Split address
         if len(self.addr) != 2:
@@ -199,9 +201,11 @@ class TikaClient:
                         data = data[l:]
             if len(text) == 0:
                 raise Exception('Empty response from Tika server')
-            print "Extracted %d bytes from %s (%s) of size %d" % (len(text), log_filename, mime_type, fsize)
+            if self.verbose:
+                print "Extracted %d bytes from %s (%s) of size %d" % (len(text), log_filename, mime_type, fsize)
         except Exception, e:
-            print "Error extracting text from %s (%s) of size %d: %s" % (log_filename, mime_type, fsize, str(e))
+            if self.verbose:
+                print "Error extracting text from %s (%s) of size %d: %s" % (log_filename, mime_type, fsize, str(e))
         finally:
             if fd: fd.close()
             if s: s.close()
@@ -291,7 +295,7 @@ class SvnRev:
                         diffobj.tempfile2
                     )
                     # Read and guess charset by ourselves for text files
-                    if mime.startswith('text/') or (mime.startswith('application/') and mime.endswith('xml')):
+                    if mime and mime.startswith('text/') or (mime.startswith('application/') and mime.endswith('xml')):
                         try:
                             fd = open(diffobj.tempfile2, 'rb')
                             content = fd.read()
@@ -302,8 +306,9 @@ class SvnRev:
                             content, charset = repo.guesser.guess_charset(content)
                             if charset:
                                 content = content.encode('utf-8')
-                                print 'Guessed %s for %s' % (charset, change.path)
-                            else:
+                                if repo.verbose:
+                                    print 'Guessed %s for %s' % (charset, change.path)
+                            elif repo.verbose:
                                 print 'Failed to guess charset for %s, not indexing' % (change.path, )
                     # Try to extract content using Tika from binary documents
                     elif repo.tika_client:
@@ -384,13 +389,14 @@ def main(command, repository, revs=[], verbose=0, force=0):
 
     tika_client = None
     if cfg.utilities.tika_server:
-        tika_client = TikaClient(cfg.utilities.tika_server, cfg.utilities.tika_mime_types)
+        tika_client = TikaClient(cfg.utilities.tika_server, cfg.utilities.tika_mime_types, verbose)
     repo = SvnRepo(
         path = repository,
         index_content = cfg.cvsdb.index_content,
         tika_client = tika_client,
         guesser = cfg.guesser(),
         svn_ignore_mimetype = cfg.options.svn_ignore_mimetype,
+        verbose = verbose,
     )
     if command == 'rebuild' or (command == 'update' and not revs):
         for rev in range(repo.rev_max+1):
@@ -445,6 +451,7 @@ Use the -v flag to cause this script to give progress information as it works.
     sys.exit(1)
 
 if __name__ == '__main__':
+    global verbose
     verbose = 0
     force = 0
     args = sys.argv

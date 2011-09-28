@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import mimetypes
+import magic
 
 have_chardet = 0
 try:
@@ -15,12 +16,8 @@ class ContentMagic:
         self.mime_magic = None
         self.errors = []
         # Try to load magic
-        try:
-            import magic
-            self.mime_magic = magic.open(magic.MAGIC_MIME_TYPE)
-            self.mime_magic.load()
-        except Exception, e:
-            self.errors.append(e)
+        self.mime_magic = magic.open(magic.MAGIC_MIME_TYPE)
+        self.mime_magic.load()
 
     # returns MIME type
     def guess_mime(self, mime, filename, tempfile):
