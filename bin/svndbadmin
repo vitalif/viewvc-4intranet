@@ -451,7 +451,6 @@ Use the -v flag to cause this script to give progress information as it works.
     sys.exit(1)
 
 if __name__ == '__main__':
-    global verbose
     verbose = 0
     force = 0
     args = sys.argv
