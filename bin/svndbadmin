@@ -96,7 +96,36 @@ class SvnRepo:
         rev = SvnRev(self, rev)
         return rev
 
-_re_diff_change_command = re.compile('(\d+)(?:,(\d+))?([acd])(\d+)(?:,(\d+))?')
+_re_diff_change_command = re.compile('^(\d+)(?:,(\d+))?([acd])(\d+)(?:,(\d+))?')
+
+class StupidBufferedReader:
+    def __init__(self, fp, buffer = 262144):
+        self.fp = fp
+        self.bufsize = buffer
+        self.buffer = ''
+        self.eof = False
+    def __iter__(self):
+        return self
+    def next(self):
+        if self.eof:
+            raise StopIteration
+        return self.readline()
+    def readline(self):
+        if self.eof:
+            return ''
+        p = self.buffer.find('\n')
+        while p < 0:
+            b = self.fp.read(self.bufsize)
+            if not len(b):
+                r = self.buffer
+                self.buffer = ''
+                self.eof = True
+                return r
+            self.buffer = self.buffer + b
+            p = self.buffer.find('\n')
+        r = self.buffer[0:p+1]
+        self.buffer = self.buffer[p+1:]
+        return r
 
 def _get_diff_counts(diff_fp):
     """Calculate the plus/minus counts by parsing the output of a
@@ -109,8 +138,7 @@ def _get_diff_counts(diff_fp):
     GNU diff manual."""
 
     plus, minus = 0, 0
-    line = diff_fp.readline()
-    while line:
+    for line in diff_fp:
         match = re.match(_re_diff_change_command, line)
         if match:
             # size of first range
@@ -136,7 +164,6 @@ def _get_diff_counts(diff_fp):
                 # RdL - remove range R of file1, which would have been
                 #       at line L of file2
                 minus = minus + count1
-        line = diff_fp.readline()
     return plus, minus
 
 class TikaClient:
@@ -265,6 +292,7 @@ class SvnRev:
                                       None,
                                       ['-b', '-B'])
             diff_fp = diffobj.get_pipe()
+            diff_fp = StupidBufferedReader(diff_fp)
             plus, minus = _get_diff_counts(diff_fp)
 
             # CustIS Bug 50473: a workaround for svnlib behaviour in file movements (FILE1 -> FILE2 + FILE1 -> null)
