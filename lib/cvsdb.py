@@ -373,6 +373,9 @@ class CheckinDatabase:
             if self.index_content:
                 sphcur = self.sphinx.cursor()
                 content = commit.GetContent()
+                # Sphinx has 4 MB text field limit
+                if len(content) >= 4*1024*1024:
+                    content = content[0:4*1024*1024]
                 props['ci_when'] = str(int(commit.GetTime() or 0))
                 if len(content):
                     props['content'] = content
@@ -461,7 +464,7 @@ class CheckinDatabase:
         elif query.sort == 'date_rev':
             order_by = 'ORDER BY `ci_when` ASC, `relevance` DESC'
         else: # /* if query.sort == 'relevance' */
-            order_by = 'ORDER BY `relevance` DESC'
+            order_by = 'ORDER BY `relevance` DESC, `ci_when` DESC'
 
         conditions = string.join((i for i in condList if i), " AND ")
         conditions = conditions and "WHERE %s" % conditions
@@ -618,7 +621,7 @@ class CheckinDatabase:
                     'limit': 200,
                     'before_match': '<span style="color:red">',
                     'after_match': '</span>',
-                    'chunk_separator': ' ... ',
+                    'chunk_separator': ' ...\n',
                 }
                 preformatted_mime = 'text/(?!html|xml).*'
                 snippets = {}
@@ -700,7 +703,7 @@ class CheckinDatabase:
             return None
 
         commits_table = self._version >= 1 and 'commits' or 'checkins'
-        sql = "SELECT * FROM %s WHERE "\
+        sql = "SELECT whoid FROM %s WHERE "\
               "  repositoryid=%%s "\
               "  AND dirid=%%s"\
               "  AND fileid=%%s"\
@@ -711,9 +714,7 @@ class CheckinDatabase:
         cursor = self.db.cursor()
         cursor.execute(sql, sql_args)
         try:
-            (ci_type, ci_when, who_id, repository_id,
-             dir_id, file_id, revision, sticky_tag, branch_id,
-             plus_count, minus_count, description_id) = cursor.fetchone()
+            who_id, = cursor.fetchone()
         except TypeError:
             return None
 

@@ -195,7 +195,7 @@ if __name__ == '__main__':
 
         if command in ('rebuild', 'update'):
             repository = vclib.ccvs.CVSRepository(None, rootpath, None,
-                                                  cfg.utilities, 0)
+                                                  cfg.utilities, 0, cfg.guesser())
             latest_checkin = db.GetLatestCheckinTime(repository)
             if latest_checkin is None:
                 command = 'rebuild'

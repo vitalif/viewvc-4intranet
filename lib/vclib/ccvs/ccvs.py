@@ -67,7 +67,8 @@ class CCVSRepository(BaseCVSRepository):
         entry.path = path
         try:
           rcsparse.parse(open(path, 'rb'), InfoSink(entry, rev, alltags))
-          entry.log = cvsdb.utf8string(entry.log)
+          if self.guesser:
+            entry.log = self.guesser.utf8(entry.log)
         except IOError, e:
           entry.errors.append("rcsparse error: %s" % e)
         except RuntimeError, e:

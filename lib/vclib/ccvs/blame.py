@@ -415,7 +415,7 @@ class CVSParser(rcsparse.Sink):
 
 
 class BlameSource:
-  def __init__(self, rcs_file, opt_rev=None):
+  def __init__(self, rcs_file, opt_rev=None, charset_guesser=None):
     # Parse the CVS file
     parser = CVSParser()
     revision = parser.parse_cvs_file(rcs_file, opt_rev)
@@ -429,6 +429,7 @@ class BlameSource:
     self.lines = lines
     self.num_lines = count
     self.parser = parser
+    self.guesser = charset_guesser
 
     # keep track of where we are during an iteration
     self.idx = -1
@@ -447,7 +448,10 @@ class BlameSource:
     prev_rev = self.parser.prev_revision.get(rev)
     line_number = idx + 1
     author = self.parser.revision_author[rev]
-    thisline = cvsdb.utf8string(self.lines[idx])
+
+    if self.guesser:
+      thisline = self.guesser.utf8(self.lines[idx])
+
     ### TODO:  Put a real date in here.
     item = vclib.Annotation(thisline, line_number, rev, prev_rev, author, None)
     self.last = item

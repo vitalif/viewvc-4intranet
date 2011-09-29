@@ -33,11 +33,11 @@ def expand_root_parent(parent_path):
   return roots
 
 
-def CVSRepository(name, rootpath, authorizer, utilities, use_rcsparse):
+def CVSRepository(name, rootpath, authorizer, utilities, use_rcsparse, charset_guesser = None):
   rootpath = canonicalize_rootpath(rootpath)
   if use_rcsparse:
     import ccvs
-    return ccvs.CCVSRepository(name, rootpath, authorizer, utilities)
+    return ccvs.CCVSRepository(name, rootpath, authorizer, utilities, charset_guesser)
   else:
     import bincvs
-    return bincvs.BinCVSRepository(name, rootpath, authorizer, utilities)
+    return bincvs.BinCVSRepository(name, rootpath, authorizer, utilities, charset_guesser)

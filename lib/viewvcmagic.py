@@ -40,7 +40,11 @@ class ContentMagic:
         if have_chardet:
             # Try chardet
             try:
-                charset = chardet.detect(content)
+                # Only detect on first 256KB if content is longer
+                if len(content) > 256*1024:
+                    charset = chardet.detect(content[0:256*1024])
+                else:
+                    charset = chardet.detect(content)
                 if charset and charset['encoding']:
                     charset = charset['encoding']
                 if charset == 'MacCyrillic':

@@ -29,7 +29,7 @@ import compat
 import popen
 
 class BaseCVSRepository(vclib.Repository):
-  def __init__(self, name, rootpath, authorizer, utilities):
+  def __init__(self, name, rootpath, authorizer, utilities, charset_guesser = None):
     if not os.path.isdir(rootpath):
       raise vclib.ReposNotFound(name)
 
@@ -37,6 +37,7 @@ class BaseCVSRepository(vclib.Repository):
     self.rootpath = rootpath
     self.auth = authorizer
     self.utilities = utilities
+    self.guesser = charset_guesser
 
     # See if this repository is even viewable, authz-wise.
     if not vclib.check_root_access(self):
@@ -156,7 +157,7 @@ class BinCVSRepository(BaseCVSRepository):
     filename, default_branch, tags, lockinfo, msg, eof = _parse_log_header(fp)
     revs = []
     while not eof:
-      revision, eof = _parse_log_entry(fp)
+      revision, eof = _parse_log_entry(fp, self.guesser)
       if revision:
         revs.append(revision)
     revs = _file_log(revs, tags, lockinfo, default_branch, rev)
@@ -246,7 +247,7 @@ class BinCVSRepository(BaseCVSRepository):
     for entry in entries:
       if vclib.check_path_access(self, path_parts + [entry.name], None, rev):
         entries_to_fetch.append(entry)
-    alltags = _get_logs(self, path_parts, entries_to_fetch, rev, subdirs)
+    alltags = _get_logs(self, path_parts, entries_to_fetch, rev, subdirs, self.guesser)
     branches = options['cvs_branches'] = []
     tags = options['cvs_tags'] = []
     for name, rev in alltags.items():
@@ -292,7 +293,7 @@ class BinCVSRepository(BaseCVSRepository):
     # Retrieve revision objects
     revs = []
     while not eof:
-      revision, eof = _parse_log_entry(fp)
+      revision, eof = _parse_log_entry(fp, self.guesser)
       if revision:
         revs.append(revision)
 
@@ -783,7 +784,7 @@ _re_log_info = re.compile(r'^date:\s+([^;]+);'
                           r'(\s+commitid:\s+([a-zA-Z0-9]+))?\n$')
 ### _re_rev should be updated to extract the "locked" flag
 _re_rev = re.compile(r'^revision\s+([0-9.]+).*')
-def _parse_log_entry(fp):
+def _parse_log_entry(fp, guesser):
   """Parse a single log entry.
 
   On entry, fp should point to the first line of the entry (the "revision"
@@ -849,7 +850,8 @@ def _parse_log_entry(fp):
       raise ValueError, 'invalid year'
   date = compat.timegm(tm)
 
-  log = cvsdb.utf8string(log)
+  if guesser:
+    log = guesser.utf8(log)
 
   return Revision(rev, date,
                   # author, state, lines changed
@@ -957,7 +959,7 @@ def _file_log(revs, taginfo, lockinfo, cur_branch, filter):
 
   return filtered_revs
 
-def _get_logs(repos, dir_path_parts, entries, view_tag, get_dirs):
+def _get_logs(repos, dir_path_parts, entries, view_tag, get_dirs, guesser):
   alltags = {           # all the tags seen in the files of this dir
     'MAIN' : '',
     'HEAD' : '1.1'
@@ -1062,7 +1064,7 @@ def _get_logs(repos, dir_path_parts, entries, view_tag, get_dirs):
       while not eof:
 
         # fetch one of the log entries
-        entry, eof = _parse_log_entry(rlog)
+        entry, eof = _parse_log_entry(rlog, guesser)
 
         if not entry:
           # parsing error
