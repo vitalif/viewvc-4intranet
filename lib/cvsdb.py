@@ -381,7 +381,8 @@ class CheckinDatabase:
                 if len(content):
                     # Maximum field size limit for Sphinx is 4MB
                     if len(content) > self.content_max_size:
-                        props['content'] = content[0:self.content_max_size]
+                        content = content[0:self.content_max_size]
+                    props['content'] = content
                     # Now, stored MIME type is only needed while searching
                     # It is guessed again when the file is displayed
                     props['mimetype'] = commit.GetMimeType()
