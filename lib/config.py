@@ -325,6 +325,7 @@ class Config:
 
     self.cvsdb.enabled = 0
     self.cvsdb.index_content = 0
+    self.cvsdb.enable_snippets = 1
     self.cvsdb.content_max_size = 0
     self.cvsdb.host = ''
     self.cvsdb.port = 3306
