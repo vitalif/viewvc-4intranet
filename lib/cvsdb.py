@@ -392,10 +392,11 @@ class CheckinDatabase:
                     )
                     # Sphinx (at least 2.0.1) still caches all string attributes inside RAM,
                     # so we'll store them in MySQL (used only for snippet display)
-                    # Limit content size:
-                    if self.content_max_size and len(content) >= self.content_max_size:
-                        content = content[0:self.content_max_size]
-                    cursor.execute('INSERT INTO contents SET id=%s, content=%s', (commit_id, content))
+                    if self.content_max_size >= 0:
+                        # Limit content size:
+                        if self.content_max_size != 0 and len(content) >= self.content_max_size:
+                            content = content[0:self.content_max_size]
+                        cursor.execute('INSERT INTO contents SET id=%s, content=%s', (commit_id, content))
         except Exception, e:
             print ("Error adding commit: '"+str(e)+"'\nValues were:\n"+
                 "\n".join(i+'='+str(props[i]) for i in props))

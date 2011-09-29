@@ -634,7 +634,7 @@ enabled = 0
 # Set to 1 to enable indexing of file contents using Sphinx and Tika
 index_content = 0
 
-# Set to limit stored text file content size (4 MB default, 0 = unlimited)
+# Set to limit stored text file content size (4 MB default, 0 = unlimited, -1 = don't store content, index only)
 #content_max_size = 4194304
 
 # Database hostname, port, and socket
