@@ -451,6 +451,8 @@ class BlameSource:
 
     if self.guesser:
       thisline = self.guesser.utf8(self.lines[idx])
+    else:
+      thisline = self.lines[idx]
 
     ### TODO:  Put a real date in here.
     item = vclib.Annotation(thisline, line_number, rev, prev_rev, author, None)

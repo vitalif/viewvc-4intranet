@@ -158,7 +158,7 @@ class CCVSRepository(BaseCVSRepository):
     if self.itemtype(path_parts, rev) != vclib.FILE:  # does auth-check
       raise vclib.Error("Path '%s' is not a file."
                         % (string.join(path_parts, "/")))
-    source = blame.BlameSource(self.rcsfile(path_parts, 1), rev)
+    source = blame.BlameSource(self.rcsfile(path_parts, 1), rev, self.guesser)
     return source, source.revision
 
   def revinfo(self, rev):

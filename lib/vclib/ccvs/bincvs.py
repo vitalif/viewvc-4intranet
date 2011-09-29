@@ -337,7 +337,7 @@ class BinCVSRepository(BaseCVSRepository):
                         % (string.join(path_parts, "/")))
 
     from vclib.ccvs import blame
-    source = blame.BlameSource(self.rcsfile(path_parts, 1), rev)
+    source = blame.BlameSource(self.rcsfile(path_parts, 1), rev, self.guesser)
     return source, source.revision
 
   def revinfo(self, rev):
