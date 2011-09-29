@@ -634,6 +634,9 @@ enabled = 0
 # Set to 1 to enable indexing of file contents using Sphinx and Tika
 index_content = 0
 
+# Set to limit stored text file content size (4 MB default, 0 = unlimited)
+#content_max_size = 4194304
+
 # Database hostname, port, and socket
 #host = localhost
 #port = 3306
@@ -661,7 +664,6 @@ index_content = 0
 # Requires Sphinx >= 0.9.9 with a real-time updatable SphinxQL index.
 # Index must be created in sphinx.conf by hand and have the following fields:
 #  rt_field = content
-#  rt_attr_string = content
 #  rt_attr_string = mimetype
 #  rt_attr_timestamp = ci_when
 #  rt_attr_uint = whoid

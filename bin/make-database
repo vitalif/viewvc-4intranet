@@ -40,7 +40,7 @@ CREATE TABLE branches (
   branch varchar(64) binary DEFAULT '' NOT NULL,
   PRIMARY KEY (id),
   UNIQUE branch (branch)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS checkins;
 CREATE TABLE checkins (
@@ -65,7 +65,7 @@ CREATE TABLE checkins (
   KEY fileid (fileid),
   KEY branchid (branchid),
   KEY descid (descid)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS descs;
 CREATE TABLE descs (
@@ -83,7 +83,7 @@ CREATE TABLE dirs (
   dir varchar(255) binary DEFAULT '' NOT NULL,
   PRIMARY KEY (id),
   UNIQUE dir (dir)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS files;
 CREATE TABLE files (
@@ -91,7 +91,7 @@ CREATE TABLE files (
   file varchar(255) binary DEFAULT '' NOT NULL,
   PRIMARY KEY (id),
   UNIQUE file (file)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS people;
 CREATE TABLE people (
@@ -99,7 +99,7 @@ CREATE TABLE people (
   who varchar(128) binary DEFAULT '' NOT NULL,
   PRIMARY KEY (id),
   UNIQUE who (who)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS repositories;
 CREATE TABLE repositories (
@@ -107,7 +107,7 @@ CREATE TABLE repositories (
   repository varchar(64) binary DEFAULT '' NOT NULL,
   PRIMARY KEY (id),
   UNIQUE repository (repository)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS tags;
 CREATE TABLE tags (
@@ -121,6 +121,12 @@ CREATE TABLE tags (
   KEY dirid (dirid),
   KEY fileid (fileid),
   KEY branchid (branchid)
+) TYPE=InnoDB;
+
+DROP TABLE IF EXISTS contents;
+CREATE TABLE contents (
+  id int NOT NULL PRIMARY KEY,
+  content MEDIUMTEXT NOT NULL DEFAULT ''
 ) TYPE=MyISAM;
 """
 
@@ -135,7 +141,7 @@ CREATE TABLE branches (
   branch varchar(64) binary DEFAULT '' NOT NULL,
   PRIMARY KEY (id),
   UNIQUE branch (branch)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS commits;
 CREATE TABLE commits (
@@ -160,7 +166,7 @@ CREATE TABLE commits (
   KEY fileid (fileid),
   KEY branchid (branchid),
   KEY descid (descid)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS descs;
 CREATE TABLE descs (
@@ -168,7 +174,8 @@ CREATE TABLE descs (
   description text,
   hash bigint(20) DEFAULT '0' NOT NULL,
   PRIMARY KEY (id),
-  KEY hash (hash)
+  KEY hash (hash),
+  FULLTEXT KEY description (description)
 ) TYPE=MyISAM;
 
 DROP TABLE IF EXISTS dirs;
@@ -177,7 +184,7 @@ CREATE TABLE dirs (
   dir varchar(255) binary DEFAULT '' NOT NULL,
   PRIMARY KEY (id),
   UNIQUE dir (dir)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS files;
 CREATE TABLE files (
@@ -185,7 +192,7 @@ CREATE TABLE files (
   file varchar(255) binary DEFAULT '' NOT NULL,
   PRIMARY KEY (id),
   UNIQUE file (file)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS people;
 CREATE TABLE people (
@@ -193,7 +200,7 @@ CREATE TABLE people (
   who varchar(128) binary DEFAULT '' NOT NULL,
   PRIMARY KEY (id),
   UNIQUE who (who)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS repositories;
 CREATE TABLE repositories (
@@ -201,7 +208,7 @@ CREATE TABLE repositories (
   repository varchar(64) binary DEFAULT '' NOT NULL,
   PRIMARY KEY (id),
   UNIQUE repository (repository)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS tags;
 CREATE TABLE tags (
@@ -215,7 +222,7 @@ CREATE TABLE tags (
   KEY dirid (dirid),
   KEY fileid (fileid),
   KEY branchid (branchid)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 
 DROP TABLE IF EXISTS metadata;
 CREATE TABLE metadata (
@@ -223,8 +230,14 @@ CREATE TABLE metadata (
   value text,
   PRIMARY KEY (name),
   UNIQUE name (name)
-) TYPE=MyISAM;
+) TYPE=InnoDB;
 INSERT INTO metadata (name, value) VALUES ('version', '1');
+
+DROP TABLE IF EXISTS contents;
+CREATE TABLE contents (
+  id int NOT NULL PRIMARY KEY,
+  content MEDIUMTEXT NOT NULL DEFAULT ''
+) TYPE=MyISAM;
 """
 
 BONSAI_COMPAT="""

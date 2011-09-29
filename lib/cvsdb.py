@@ -40,7 +40,7 @@ error = "cvsdb error"
 class CheckinDatabase:
     def __init__(self, host, port, socket, user, passwd, database, row_limit, min_relevance, cfg,
                  authorizer = None, index_content = 0, sphinx_host = None, sphinx_port = None,
-                 sphinx_socket = None, sphinx_index = None):
+                 sphinx_socket = None, sphinx_index = None, content_max_size = 0):
         self.cfg = cfg
 
         self._host = host
@@ -56,6 +56,7 @@ class CheckinDatabase:
 
         # Sphinx settings
         self.index_content = index_content
+        self.content_max_size = content_max_size
         self.sphinx_host = sphinx_host
         self.sphinx_port = sphinx_port
         self.sphinx_socket = sphinx_socket
@@ -373,9 +374,6 @@ class CheckinDatabase:
             if self.index_content:
                 sphcur = self.sphinx.cursor()
                 content = commit.GetContent()
-                # Sphinx has 4 MB text field limit
-                if len(content) >= 4*1024*1024:
-                    content = content[0:4*1024*1024]
                 props['ci_when'] = str(int(commit.GetTime() or 0))
                 if len(content):
                     props['content'] = content
@@ -392,6 +390,12 @@ class CheckinDatabase:
                         ','.join('%s' for i in props)+')',
                         tuple(props[i] for i in props)
                     )
+                    # Sphinx (at least 2.0.1) still caches all string attributes inside RAM,
+                    # so we'll store them in MySQL (used only for snippet display)
+                    # Limit content size:
+                    if self.content_max_size and len(content) >= self.content_max_size:
+                        content = content[0:self.content_max_size]
+                    cursor.execute('INSERT INTO contents SET id=%s, content=%s', (commit_id, content))
         except Exception, e:
             print ("Error adding commit: '"+str(e)+"'\nValues were:\n"+
                 "\n".join(i+'='+str(props[i]) for i in props))
@@ -477,7 +481,7 @@ class CheckinDatabase:
         elif self._row_limit:
             limit = "LIMIT %s" % (str(self._row_limit))
 
-        fields = "id `id`, WEIGHT() `relevance`, `content`, `mimetype`"
+        fields = "id `id`, WEIGHT() `relevance`, `mimetype`"
 
         return "SELECT %s FROM %s %s %s %s" % (fields, self.sphinx_index, conditions, order_by, limit)
 
@@ -611,11 +615,12 @@ class CheckinDatabase:
         if len(query.content_query) and self.sphinx:
             # Use Sphinx to search on document content
             sql = self.CreateSphinxQueryString(query)
-            cursor = self.sphinx.cursor()
-            cursor.execute(sql)
-            sphinx_rows = list((str(docid), rel, content, mimetype) for docid, rel, content, mimetype in cursor)
+            cursor = self.db.cursor()
+            sphcur = self.sphinx.cursor()
+            sphcur.execute(sql)
+            sphinx_rows = list((str(docid), rel, mimetype) for docid, rel, mimetype in sphcur)
             if len(sphinx_rows):
-                # Fetch snippets
+                # FIXME remove hardcode
                 snippet_options = {
                     'around': 15,
                     'limit': 200,
@@ -627,26 +632,32 @@ class CheckinDatabase:
                 snippets = {}
                 bm_html = cgi.escape(snippet_options['before_match'])
                 am_html = cgi.escape(snippet_options['after_match'])
-                for docid, rel, content, mimetype in sphinx_rows:
-                    cursor.execute(
-                        'CALL SNIPPETS(%s, %s, %s'+''.join(', %s AS '+i for i in snippet_options)+')',
-                        (content, self.sphinx_index, query.content_query) + tuple(snippet_options.values())
-                    )
-                    s, = cursor.fetchone()
-                    s = cgi.escape(s)
-                    if re.match(preformatted_mime, mimetype):
-                        s = s.replace('\n', '<br />')
-                    s = s.replace(bm_html, snippet_options['before_match'])
-                    s = s.replace(am_html, snippet_options['after_match'])
-                    snippets[docid] = s
-                # Fetch all fields from MySQL
-                sql = self.CreateIdQueryString((docid for (docid, _, _, _) in sphinx_rows))
-                cursor = self.db.cursor()
+                # Build snippets using Sphinx (content is stored in MySQL)
+                for docid, rel, mimetype in sphinx_rows:
+                    cursor.execute('SELECT content FROM contents WHERE id=%s', (docid, ))
+                    s = cursor.fetchone()
+                    if s:
+                        s = s[0]
+                        sphcur.execute(
+                            'CALL SNIPPETS(%s, %s, %s'+''.join(', %s AS '+i for i in snippet_options)+')',
+                            (s, self.sphinx_index, query.content_query) + tuple(snippet_options.values())
+                        )
+                        s, = sphcur.fetchone()
+                        s = cgi.escape(s)
+                        if re.match(preformatted_mime, mimetype):
+                            s = s.replace('\n', '<br />')
+                        s = s.replace(bm_html, snippet_options['before_match'])
+                        s = s.replace(am_html, snippet_options['after_match'])
+                        snippets[docid] = s
+                    else:
+                        snippets[docid] = ''
+                # Fetch commit attributes from MySQL
+                sql = self.CreateIdQueryString((docid for (docid, _, _) in sphinx_rows))
                 cursor.execute(sql)
                 byid = {}
                 for row in cursor:
                     byid[str(row[0])] = row
-                rows = list(byid[docid] + (rel, snippets[docid]) for (docid, rel, _, _) in sphinx_rows if docid in byid)
+                rows = list(byid[docid] + (rel, snippets[docid]) for (docid, rel, _) in sphinx_rows if docid in byid)
             else:
                 rows = []
         else:
@@ -751,6 +762,7 @@ class CheckinDatabase:
         self.sql_purge('branches', 'id', 'branchid', checkins_table)
         self.sql_purge('descs', 'id', 'descid', checkins_table)
         self.sql_purge('people', 'id', 'whoid', checkins_table)
+        self.sql_purge('contents', 'id', 'id', checkins_table)
 
         # Reset all internal id caches.  We could be choosier here,
         # but let's just be as safe as possible.
@@ -1096,6 +1108,7 @@ def ConnectDatabase(cfg, authorizer=None, readonly=0):
         sphinx_port = int(cfg.cvsdb.sphinx_port),
         sphinx_socket = cfg.cvsdb.sphinx_socket,
         sphinx_index = cfg.cvsdb.sphinx_index,
+        content_max_size = cfg.cvsdb.content_max_size,
         cfg = cfg,
     )
     db.Connect()
