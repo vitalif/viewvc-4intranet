@@ -32,7 +32,7 @@ gac = {
   'ga_always_require' : 0,
   'fof_sudo_server'   : '',
   'fof_sudo_cookie'   : 'fof_sudo_id',
-  'gc_probability'    : 1000,
+  'gc_probability'    : 20,
 }
 
 for i in gac:
@@ -48,8 +48,8 @@ def cacheclean():
   global gac
   t = time.time()
   for fn in os.listdir(gac['cache_dir']):
-    if t > os.stat(fn).st_mtime:
-      os.unlink(fn)
+    if t > os.stat(gac['cache_dir']+'/'+fn).st_mtime:
+      os.unlink(gac['cache_dir']+'/'+fn)
 
 def cacheset(key, value, expire = 86400):
   fn = cachefn(key)
@@ -183,7 +183,8 @@ def set_env_user(req, r_data):
 
 def globalauth_handler(req, jar, v):
   global gac
-  if random.randint(1, gac['gc_probability']) == 1:
+  i = random.randint(1, gac['gc_probability'])
+  if i == 1:
     cacheclean()
   r_id = jar.get(gac['cookie_name'], '')
   if r_id:
