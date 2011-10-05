@@ -907,7 +907,7 @@ def check_freshness(request, mtime=None, etag=None, weak=0):
                                    cfg.options.http_expiration_time)
     request.server.addheader('Expires', expiration)
     request.server.addheader('Cache-Control',
-                             'max-age=%d' % cfg.options.http_expiration_time)
+                             'must-revalidate, max-age=%d' % cfg.options.http_expiration_time)
 
   if isfresh:
     request.server.header(status='304 Not Modified')
@@ -3568,7 +3568,7 @@ def view_revision(request):
     'jump_rev_hidden_values' : jump_rev_hidden_values,
   }))
   if rev == youngest_rev:
-    request.server.addheader("Cache-control", "no-store")
+    request.server.addheader("Cache-control", "must-revalidate, no-store")
   generate_page(request, "revision", data)
 
 def is_query_supported(request):
