@@ -150,7 +150,8 @@ class Request:
                                          rootpath,
                                          authorizer,
                                          self.cfg.utilities,
-                                         self.cfg.options.use_rcsparse)
+                                         self.cfg.options.use_rcsparse,
+                                         self.cfg.guesser())
       elif roottype == 'svn':
         rootpath = vclib.svn.canonicalize_rootpath(rootpath)
         repos = vclib.svn.SubversionRepository(rootname,
