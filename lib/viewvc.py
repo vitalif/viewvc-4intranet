@@ -1476,7 +1476,7 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
   # one from the file contents we fetch with PATH and REV.
   if not use_pygments:
     if blame_source:
-      return blame_source
+      return blame_source, encoding
     else:
       lines = []
       line_no = 0
