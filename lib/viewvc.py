@@ -1486,7 +1486,7 @@ def markup_stream_pygments(request, cfg, blame_data, fp, filename, mime_type):
                                 None, None, None, None)
         item.diff_href = None
         lines.append(item)
-    return lines
+    return lines, encoding
 
   # If we get here, we're highlighting something.
   class PygmentsSink:
@@ -2751,9 +2751,9 @@ _re_extract_info = re.compile(r'@@ \-([0-9]+).*\+([0-9]+).*@@(.*)')
 
 class DiffSource:
   def __init__(self, fp, cfg):
-    self.fp = fp
+    self.lines = cfg.guesser().utf8(''.join(fp.readlines())).split('\n')
+    self.lineno = 0
     self.cfg = cfg
-    self.save_line = None
     self.line_number = None
     self.prev_line_number = None
 
@@ -2810,11 +2810,11 @@ class DiffSource:
         return item
       self.state = 'dump'
 
-    if self.save_line:
-      line = self.save_line
-      self.save_line = None
+    if self.lineno < len(self.lines):
+      line = self.lines[self.lineno]
+      self.lineno = self.lineno+1
     else:
-      line = self.fp.readline()
+      line = None
 
     if not line:
       if self.state == 'no-changes':
@@ -2853,7 +2853,6 @@ class DiffSource:
 
     diff_code = line[0]
     output = self._format_text(line[1:])
-    output = self.cfg.guesser().utf8(output)
 
     if diff_code == '+':
       if self.state == 'dump':
@@ -2872,7 +2871,7 @@ class DiffSource:
     if self.left_col or self.right_col:
       # save the line for processing again later, and move into the
       # flushing state
-      self.save_line = line
+      self.lineno = self.lineno-1
       self.state = 'flush-' + self.state
       return None
 
