@@ -378,6 +378,9 @@ class _diff_fp:
   def readline(self):
     return self.fp.readline()
 
+  def readlines(self):
+    return self.fp.readlines()
+
   def close(self):
     try:
       if self.fp:
