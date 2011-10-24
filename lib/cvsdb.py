@@ -762,15 +762,28 @@ class CheckinDatabase:
         cursor = self.db.cursor()
         cursor.execute(sql)
 
-    def PurgeRepository(self, repository):
+    # Purge a repository fully or partially
+    def PurgeRepository(self, repository, path_prefix = None):
         rep_id = self.GetRepositoryID(repository, auto_set=0)
         if not rep_id:
             raise UnknownRepositoryError("Unknown repository '%s'"
                                          % (repository))
 
         checkins_table = self._version >= 1 and 'commits' or 'checkins'
-        self.sql_delete('repositories', 'id', rep_id)
-        self.sql_purge(checkins_table, 'repositoryid', 'id', 'repositories')
+
+        # Purge checkins
+        cursor = self.db.cursor()
+        tables = "DELETE FROM c USING %s c" % (checkins_table, )
+        where = " WHERE c.repositoryid=%s"
+        args = (rep_id, )
+        if path_prefix is not None:
+            tables = tables + ", dirs d"
+            where = where + " AND d.id=c.dirid AND (d.dir=%s OR d.dir LIKE %s)"
+            args = args + (path_prefix, path_prefix+'/%')
+        cursor.execute(tables+where, args)
+
+        # Purge unreferenced items
+        self.sql_purge('repositories', 'id', 'repositoryid', checkins_table)
         self.sql_purge('files', 'id', 'fileid', checkins_table)
         self.sql_purge('dirs', 'id', 'dirid', checkins_table)
         self.sql_purge('branches', 'id', 'branchid', checkins_table)
