@@ -690,7 +690,7 @@ class CheckinDatabase:
                     rows[docid]['snippet'] = self.get_snippet(sph, content, query.content_query, rows[docid]['mimetype'])
 
     # Run query and return all rows as dictionaries
-    def selectall(self, db, sql, args = (), key = None):
+    def selectall(self, db, sql, args = None, key = None):
         cursor = db.cursor()
         cursor.execute(sql, args)
         desc = list(r[0] for r in cursor.description)
@@ -712,7 +712,7 @@ class CheckinDatabase:
         if len(rows):
             for r in rows:
                 r['id'] = str(r['id'])
-            m_rows = self.selectall(self.db, self.CreateIdQueryString((r['id'] for r in rows)), (), 'id')
+            m_rows = self.selectall(self.db, self.CreateIdQueryString((r['id'] for r in rows)), None, 'id')
             new_rows = []
             # Check rights BEFORE fetching snippets
             for i in rows:
