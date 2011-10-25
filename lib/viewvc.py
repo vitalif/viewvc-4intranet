@@ -4025,8 +4025,8 @@ def query_patch(request, commits):
   for file in files.keys():
     rev1 = prev_rev(files[file][0])
     rev2 = files[file][1]
-    repos = files[file][2]['repos']
-    roottype = files[file][2]['roottype']
+    repos = files[file][2].repos
+    roottype = files[file][2].roottype
     if roottype == 'svn':
       try:
         rev1 = repos._getrev(rev1)
