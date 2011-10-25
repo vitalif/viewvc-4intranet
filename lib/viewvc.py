@@ -3593,7 +3593,7 @@ def is_querydb_nonempty_for_root(request):
     if request.cfg.cvsdb.check_database_for_root:
       global cvsdb
       import cvsdb
-      db = cvsdb.ConnectDatabaseReadOnly(request.cfg, request.auth)
+      db = cvsdb.ConnectDatabaseReadOnly(request.cfg, request)
       repos_root, repos_dir = cvsdb.FindRepository(db, request.rootpath)
       if repos_root:
         return 1
@@ -3992,16 +3992,16 @@ def query_is_unsecure_patch(request, commits):
   lr = {}
   for commit in commits:
     for fileinfo in commit.files:
-      fn = _path_join([fileinfo.root['rootname'], fileinfo.dir, fileinfo.file])
+      fn = _path_join([fileinfo.root.rootname, fileinfo.dir, fileinfo.file])
       if mr.get(fn, ''):
         pr = mr[fn]
-        if fileinfo.root['roottype'] == 'svn':
-          pr = lr[fileinfo.root['rootname']]
+        if fileinfo.root.roottype == 'svn':
+          pr = lr[fileinfo.root.rootname]
         pr = prev_rev(pr)
         if rev_cmp(pr, fileinfo.rev) > 0:
           return True
-      if fileinfo.root['roottype'] == 'svn':
-        lr[fileinfo.root['rootname']] = fileinfo.rev
+      if fileinfo.root.roottype == 'svn':
+        lr[fileinfo.root.rootname] = fileinfo.rev
       mr[fn] = fileinfo.rev
   return None
 
@@ -4145,7 +4145,7 @@ def view_query(request):
   global cvsdb
   import cvsdb
 
-  db = cvsdb.ConnectDatabaseReadOnly(cfg, request.auth)
+  db = cvsdb.ConnectDatabaseReadOnly(cfg, request)
   repos_dir = []
   if not repos_root and request.rootpath:
     repos_root, repos_dir = cvsdb.FindRepository(db, request.rootpath)
