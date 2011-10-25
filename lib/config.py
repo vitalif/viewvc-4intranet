@@ -344,6 +344,13 @@ class Config:
     self.cvsdb.sphinx_port = 3307
     self.cvsdb.sphinx_socket = ''
     self.cvsdb.sphinx_index = ''
+    self.cvsdb.sphinx_preformatted_mime = 'text/(?!html|xml).*'
+    self.cvsdb.sphinx_snippet_options =
+        'around: 15\n'\
+        'limit: 200\n'\
+        'before_match: <span style="color:red">\n'\
+        'after_match: </span>\n'\
+        'chunk_separator:  ... \n\n'
 
 def _startswith(somestr, substr):
   return somestr[:len(substr)] == substr

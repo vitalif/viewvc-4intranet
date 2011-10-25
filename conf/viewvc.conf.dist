@@ -637,10 +637,6 @@ index_content = 0
 # Set to limit stored text file content size (max. 4MB - Sphinx limit)
 #content_max_size = 4194304
 
-# Do store indexed content for snippet display?
-# Do display snippets when searching on content?
-enable_snippets = 1
-
 # Database hostname, port, and socket
 #host = localhost
 #port = 3306
@@ -682,6 +678,22 @@ enable_snippets = 1
 #sphinx_port =
 #sphinx_socket = /var/run/sphinxql.sock
 #sphinx_index = viewvc
+
+## Parameters for snippet (excerpt) display
+
+# Enable snippets? ViewVC indexes binary file contents in MySQL when enabled.
+enable_snippets = 1
+
+# Regexp for MIME types in which \n means "newline"
+sphinx_preformatted_mime = text/(?!html|xml).*
+
+# Sphinx snippet options - see http://sphinxsearch.com/docs/current.html#api-func-buildexcerpts
+sphinx_snippet_options =
+    around: 15
+    limit: 200
+    before_match: <span style="color:red">
+    after_match: </span>
+    chunk_separator:  ... \n
 
 # Limit the number of rows returned by a given query to this number.
 #row_limit = 1000

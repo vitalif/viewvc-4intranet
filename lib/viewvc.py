@@ -96,6 +96,13 @@ _RCSDIFF_ERROR = 'error'
 # special characters that don't need to be URL encoded
 _URL_SAFE_CHARS = "/*~"
 
+class Repo:
+  def __init__(self, repos, rootname, auth, rootpath, roottype):
+    self.repos = repos
+    self.rootname = rootname
+    self.auth = auth
+    self.rootpath = rootpath
+    self.roottype = roottype
 
 class Request:
   def __init__(self, server, cfg):
@@ -134,6 +141,15 @@ class Request:
   def utf8(self, value):
     return self.cfg.guesser().utf8(value)
 
+  def get_repo(self, rootname):
+    if rootname in self.all_repos:
+      return self.all_repos[rootname]
+    try:
+      r = self.all_repos[rootname] = self.create_repos(rootname)
+    except:
+      r = None
+    return r
+
   def create_repos(self, rootname):
     if not rootname:
       return None
@@ -163,13 +179,7 @@ class Request:
         return None
 
       repos.open()
-      return {
-        'repos'    : repos,
-        'rootname' : rootname,
-        'auth'     : authorizer,
-        'rootpath' : rootpath,
-        'roottype' : roottype,
-      }
+      return Repo(repos, rootname, authorizer, rootpath, roottype)
 
     return None
 
@@ -278,9 +288,9 @@ class Request:
     if self.rootname:
       rcr = self.create_repos(self.rootname)
       if rcr:
-        self.repos = rcr['repos']
-        self.rootpath = rcr['rootpath']
-        self.auth = rcr['auth']
+        self.repos = rcr.repos
+        self.rootpath = rcr.rootpath
+        self.auth = rcr.auth
         # Overlay root-specific options.
         cfg.overlay_root_options(self.rootname)
         if self.repos.roottype() == vclib.CVS:
@@ -3778,8 +3788,6 @@ def build_commit(request, files, max_files, dir_strip, format):
   plus_count = 0
   minus_count = 0
   found_unreadable = 0
-  if not request.all_repos:
-    request.all_repos = {}
 
   for f in files:
     dirname = f.GetDirectory()
@@ -3798,19 +3806,14 @@ def build_commit(request, files, max_files, dir_strip, format):
 
     # Check path access (since the commits database logic bypasses the
     # vclib layer and, thus, the vcauth stuff that layer uses).
-    my_repos = request.all_repos.get(f.GetRepository(), '')
-    if not my_repos:
-      try:
-        my_repos = request.all_repos[f.GetRepository()] = request.create_repos(f.GetRepository())
-      except:
-        my_repos = None
+    my_repos = request.get_repo(f.GetRepository())
     if not my_repos:
       return None
-    if my_repos['roottype'] == 'cvs':
-      # we store UTF-8 in the DB
+    if my_repos.roottype == 'cvs':
+      # we store UTF8 in the DB
       try: where = where.decode('utf-8')
       except: pass
-      # FIXME maybe store "real" filesystem path in the DB instead of having such setting?
+      # FIXME maybe also store "real" non-UTF8 filesystem path in the DB instead of having such setting?
       try: where = where.encode(cfg.options.cvs_ondisk_charset)
       except: pass
     path_parts = _path_parts(where)
@@ -3818,13 +3821,13 @@ def build_commit(request, files, max_files, dir_strip, format):
     # In CVS, we can actually look at deleted revisions; in Subversion
     # we can't -- we'll look at the previous revision instead.
     exam_rev = rev
-    if my_repos['roottype'] == 'svn' and change_type == 'Remove':
+    if my_repos.roottype == 'svn' and change_type == 'Remove':
       exam_rev = rev_prev
 
     if path_parts:
       # Skip files in CVSROOT if asked to hide such.
       if cfg.options.hide_cvsroot \
-         and is_cvsroot_path(my_repos['roottype'], path_parts):
+         and is_cvsroot_path(my_repos.roottype, path_parts):
         found_unreadable = 1
         continue
 
@@ -3838,7 +3841,7 @@ def build_commit(request, files, max_files, dir_strip, format):
       # but to omit as unauthorized paths the authorization logic
       # can't find.
       try:
-        readable = vclib.check_path_access(my_repos['repos'], path_parts,
+        readable = vclib.check_path_access(my_repos.repos, path_parts,
                                            None, exam_rev)
       except vclib.ItemNotFound:
         readable = 0
@@ -3846,30 +3849,30 @@ def build_commit(request, files, max_files, dir_strip, format):
         found_unreadable = 1
         continue
 
-    if my_repos['roottype'] == 'svn':
+    if my_repos.roottype == 'svn':
       params = { 'pathrev': exam_rev }
     else:
       params = { 'revision': exam_rev, 'pathrev': f.GetBranch() or None }  
 
-    dir_href = request.get_url(root=my_repos['rootname'], view_func=view_directory,
+    dir_href = request.get_url(root=my_repos.rootname, view_func=view_directory,
                                where=dirname, pathtype=vclib.DIR,
                                params=params, escape=1)
-    log_href = request.get_url(root=my_repos['rootname'], view_func=view_log,
+    log_href = request.get_url(root=my_repos.rootname, view_func=view_log,
                                where=where, pathtype=vclib.FILE,
                                params=params, escape=1)
     diff_href = view_href = download_href = None
     if 'markup' in cfg.options.allowed_views:
-      view_href = request.get_url(root=my_repos['rootname'], view_func=view_markup,
+      view_href = request.get_url(root=my_repos.rootname, view_func=view_markup,
                                   where=where, pathtype=vclib.FILE,
                                   params=params, escape=1)
     if 'co' in cfg.options.allowed_views:
-      download_href = request.get_url(root=my_repos['rootname'], view_func=view_checkout,
+      download_href = request.get_url(root=my_repos.rootname, view_func=view_checkout,
                                       where=where, pathtype=vclib.FILE,
                                       params=params, escape=1)
     path_prev = None
-    if change_type == 'Add' and my_repos['roottype'] == 'svn':
+    if change_type == 'Add' and my_repos.roottype == 'svn':
       try:
-        rev_prev, path_prev = my_repos['repos'].last_rev(where, int(rev), int(rev_prev))
+        rev_prev, path_prev = my_repos.repos.last_rev(where, int(rev), int(rev_prev))
         if int(rev_prev) == int(rev):
           path_prev = None
       except:
@@ -3881,7 +3884,7 @@ def build_commit(request, files, max_files, dir_strip, format):
         'r2': rev,
         'diff_format': None
         })
-      diff_href = request.get_url(root=my_repos['rootname'], view_func=view_diff,
+      diff_href = request.get_url(root=my_repos.rootname, view_func=view_diff,
                                   where=where, pathtype=vclib.FILE,
                                   params=diff_href_params, escape=1)
     mime_type = calculate_mime_type(request, path_parts, exam_rev)
@@ -3946,12 +3949,12 @@ def build_commit(request, files, max_files, dir_strip, format):
     commit.short_log = format_log(desc, cfg, format != 'rss')
   commit.author = request.server.escape(author)
   commit.rss_date = make_rss_time_string(date, request.cfg)
-  if my_repos['roottype'] == 'svn':
+  if my_repos.roottype == 'svn':
     commit.rev = commit_rev
     commit.rss_url = '%s://%s%s' % \
       (request.server.getenv("HTTPS") == "on" and "https" or "http",
        request.server.getenv("HTTP_HOST"),
-       request.get_url(root=my_repos['rootname'], view_func=view_revision,
+       request.get_url(root=my_repos.rootname, view_func=view_revision,
                        params={'revision': commit.rev},
                        escape=1))
   else:

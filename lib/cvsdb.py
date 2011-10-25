@@ -1,4 +1,3 @@
-# -*-python-*-
 #
 # Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
 #
@@ -38,32 +37,45 @@ error = "cvsdb error"
 ## complient database interface
 
 class CheckinDatabase:
-    def __init__(self, host, port, socket, user, passwd, database, row_limit, min_relevance, cfg,
-                 authorizer = None, index_content = 0, sphinx_host = None, sphinx_port = None,
-                 sphinx_socket = None, sphinx_index = None, content_max_size = 0, enable_snippets = 1):
+    def __init__(self, cfg, guesser, readonly, request = None):
         self.cfg = cfg
+        self.guesser = guesser
+        self.readonly = readonly
+        self.request = request
 
-        self._host = host
-        self._port = port
-        self._socket = socket
-        self._user = user
-        self._passwd = passwd
-        self._database = database
-        self._row_limit = row_limit
-        self._version = None
-        self._min_relevance = min_relevance
-        self.authorizer = authorizer
+        self._host      = cfg.host
+        self._port      = cfg.port
+        self._socket    = cfg.socket
+        self._user      = readonly and cfg.user or cfg.readonly_user
+        self._passwd    = readonly and cfg.passwd or cfg.readonly_passwd
+        self._database  = cfg.database
+        self._row_limit = cfg.row_limit
+        self._version   = None
+        self._min_relevance = cfg.fulltext_min_relevance
 
         # Sphinx settings
-        self.index_content = index_content
-        if content_max_size > 4*1024*1024 or content_max_size <= 0:
-            content_max_size = 4*1024*1024
-        self.enable_snippets = enable_snippets
-        self.content_max_size = content_max_size
-        self.sphinx_host = sphinx_host
-        self.sphinx_port = sphinx_port
-        self.sphinx_socket = sphinx_socket
-        self.sphinx_index = sphinx_index
+        self.index_content = cfg.index_content
+        self.content_max_size = cfg.context_max_size
+        if self.content_max_size > 4*1024*1024 or self.content_max_size <= 0:
+            self.content_max_size = 4*1024*1024
+        self.enable_snippets = cfg.enable_snippets
+        self.sphinx_host = cfg.sphinx_host
+        self.sphinx_port = cfg.sphinx_port
+        self.sphinx_socket = cfg.sphinx_socket
+        self.sphinx_index = cfg.sphinx_index
+
+        # Snippet settings
+        for i in cfg.sphinx_snippet_options.split('\n'):
+            (a, b) = i.split(':')
+            if b[0] == ' ':
+                b = b[1:]
+            b = b.replace('\\n', '\n')
+            self.snippet_options[a] = b
+        self.preformatted_mime = cfg.sphinx_preformatted_mime
+        if 'before_match' in self.snippet_options:
+            self.snippet_beforematch_html = cgi.escape(self.snippet_options['before_match'])
+        if 'after_match' in self.snippet_options:
+            self.snippet_aftermatch_html = cgi.escape(self.snippet_options['after_match'])
 
         ## database lookup caches
         self._get_cache = {}
@@ -383,8 +395,8 @@ class CheckinDatabase:
                     if len(content) > self.content_max_size:
                         content = content[0:self.content_max_size]
                     props['content'] = content
-                    # Now, stored MIME type is only needed while searching
-                    # It is guessed again when the file is displayed
+                    # Stored MIME type is only needed for snippet display
+                    # It is re-guessed when the file is displayed
                     props['mimetype'] = commit.GetMimeType()
                     props['id'] = str(commit_id)
                     del props['addedlines']
@@ -396,8 +408,8 @@ class CheckinDatabase:
                         ','.join('%s' for i in props)+')',
                         tuple(props[i] for i in props)
                     )
-                    # Sphinx (at least 2.0.1) still caches all string attributes inside RAM,
-                    # so we'll store them in MySQL (used only for snippet display)
+                    # Sphinx (at least 2.0.1) still caches all string attributes
+                    # inside RAM, so we'll store contents in MySQL
                     if self.enable_snippets:
                         cursor.execute('INSERT INTO contents SET id=%s, content=%s', (commit_id, content))
         except Exception, e:
@@ -485,7 +497,7 @@ class CheckinDatabase:
         elif self._row_limit:
             limit = "LIMIT %s" % (str(self._row_limit))
 
-        fields = "id `id`, WEIGHT() `relevance`, `mimetype`"
+        fields = "id, `mimetype`, WEIGHT() `relevance`"
 
         return "SELECT %s FROM %s %s %s %s" % (fields, self.sphinx_index, conditions, order_by, limit)
 
@@ -493,7 +505,7 @@ class CheckinDatabase:
     def CreateIdQueryString(self, ids):
         commits_table = self._version >= 1 and 'commits' or 'checkins'
         return (
-            'SELECT %s.*, repositories.repository AS repository_name, dirs.dir AS dir_name, files.file AS file_name'
+            'SELECT %s.*, repositories.repository AS repository_name, dirs.dir AS dir_name, files.file AS file_name, "" AS snippet'
             ' FROM %s, repositories, dirs, files'
             ' WHERE %s.id IN (%s) AND repositoryid=repositories.id'
             ' AND dirid=dirs.id AND fileid=files.id' % (commits_table, commits_table, commits_table, ','.join(ids))
@@ -508,7 +520,7 @@ class CheckinDatabase:
             "files.file AS file_name"]
         tableList = [
             (commits_table, None),
-            ("repositories","(%s.repositoryid=repositories.id)" % (commits_table)),
+            ("repositories", "(%s.repositoryid=repositories.id)" % (commits_table)),
             ("dirs", "(%s.dirid=dirs.id)" % (commits_table)),
             ("files", "(%s.fileid=files.id)" % (commits_table))]
         condList = []
@@ -607,110 +619,146 @@ class CheckinDatabase:
         return sql
 
     def check_commit_access(self, repos, dir, file, rev):
-        if self.authorizer:
+        r = self.request.get_repo(repos)
+        if r.auth:
             rootname = repos.split('/')
             rootname = rootname.pop()
             path_parts = dir.split('/')
             path_parts.append(file)
-            return self.authorizer.check_path_access(rootname, path_parts, vclib.FILE, rev)
+            return r.auth.check_path_access(rootname, path_parts, vclib.FILE, rev)
         return True
 
-    def fetch_snippets(self, query, sphinx_rows, cursor, sphinx_cursor):
-        snippets = {}
-        if self.enable_snippets:
-            # FIXME remove hardcode
-            snippet_options = {
-                'around': 15,
-                'limit': 200,
-                'before_match': '<span style="color:red">',
-                'after_match': '</span>',
-                'chunk_separator': ' ...\n',
-            }
-            preformatted_mime = 'text/(?!html|xml).*'
-            bm_html = cgi.escape(snippet_options['before_match'])
-            am_html = cgi.escape(snippet_options['after_match'])
-            # Build snippets using Sphinx (content is stored in MySQL)
-            for docid, rel, mimetype in sphinx_rows:
-                cursor.execute('SELECT content FROM contents WHERE id=%s', (docid, ))
-                s = cursor.fetchone()
-                if s:
-                    s = s[0]
-                    sphinx_cursor.execute(
-                        'CALL SNIPPETS(%s, %s, %s'+''.join(', %s AS '+i for i in snippet_options)+')',
-                        (s, self.sphinx_index, query.content_query) + tuple(snippet_options.values())
-                    )
-                    s, = sphinx_cursor.fetchone()
-                    s = cgi.escape(s)
-                    if re.match(preformatted_mime, mimetype):
-                        s = s.replace('\n', '<br />')
-                    s = s.replace(bm_html, snippet_options['before_match'])
-                    s = s.replace(am_html, snippet_options['after_match'])
-                    snippets[docid] = s
-        return snippets
+    # Build a snippet using Sphinx
+    def get_snippet(self, sph, content, query):
+        sph.execute(
+            'CALL SNIPPETS(%s, %s, %s'+''.join(', %s AS '+i for i in snippet_options)+')',
+            (content, self.sphinx_index, query) + tuple(snippet_options.values())
+        )
+        s, = sph.fetchone()
+        s = cgi.escape(s)
+        if re.match(self.preformatted_mime, mimetype):
+            s = s.replace('\n', '<br />')
+        if 'before_match' in self.snippet_options:
+            s = s.replace(self.sphinx_beforematch_html, self.snippet_options['before_match'])
+        if 'after_match' in self.snippet_options:
+            s = s.replace(self.sphinx_aftermatch_html, self.snippet_options['after_match'])
+        return s
+
+    # Fetch snippets for a query result
+    def fetch_snippets(self, query, rows):
+        if not len(rows):
+            return
+        cursor = self.db.cursor()
+        sph = self.sphinx.cursor()
+        # Fetch binary file contents, stored in MySQL
+        cursor.execute(
+            'SELECT id, content FROM contents WHERE id IN (' +
+            ','.join(sphinx_rows.keys()) + ')'
+        )
+        # Build snippets
+        for (docid, content) in cursor:
+            rows[docid]['snippet'] = self.get_snippet(sph, content, query.content_query)
+        for docid in rows:
+            mime = rows[docid]['mimetype']
+            if not rows[docid]['snippet'] and mime and
+               (mime.startswith('text/') or (mime.startswith('application/') and mime.endswith('xml')):
+                # Fetch text file contents directly from SVN
+                repo = rows[docid]['repository_name']
+                path = rows[docid]['dir_name']+'/'+rows[docid]['file_name']
+                revision = rows[docid]['revision']
+                fp = None
+                try:
+                    fp, = self.request.get_repo(repo).repo.openfile(path, revision)
+                    content = fp.read()
+                    fp.close()
+                    content = repo.guesser.utf8(content)
+                except:
+                    if fp: fp.close()
+                    content = None
+                # Build snippet
+                if content:
+                    rows[docid]['snippet'] = self.get_snippet(sph, content, query.content_query)
+
+    # Run query and return all rows as dictionaries
+    def selectall(db, sql, args = (), key = None):
+        cursor = db.cursor()
+        cursor.execute(sql, args)
+        if key:
+            rows = {}
+            for i in cursor:
+                r = dict(zip(cursor.description, i))
+                rows[r[key]] = r
+        else:
+            rows = []
+            for i in cursor:
+                rows.append(dict(zip(cursor.description, i)))
+        return rows
+
+    # Run content query
+    def RunSphinxQuery(self, query):
+        cursor = self.db.cursor()
+        rows = selectall(self.sphinx, self.CreateSphinxQueryString(query))
+        if len(rows):
+            m_rows = selectall(self.db, self.CreateIdQueryString(sphinx_rows.keys()), (), 'id')
+            new_rows = []
+            # Check rights BEFORE fetching snippets
+            for i in rows:
+                if i['id'] in m_rows:
+                    if not self.check_commit_access(
+                        m_rows[i['id']]['repository_name'],
+                        m_rows[i['id']]['dir_name'],
+                        m_rows[i['id']]['file_name'],
+                        m_rows[i['id']]['revision']):
+                        del m_rows[i['id']]
+                    else:
+                        m_rows[i['id']].update(i)
+            # Fetch snippets
+            if self.enable_snippets:
+                self.fetch_snippets(query, m_rows)
+            for i in rows:
+                if i['id'] in m_rows:
+                    new_rows.push(m_rows[i['id']])
+            rows = new_rows
+        else:
+            rows = []
+        return rows
 
     def RunQuery(self, query):
         if len(query.content_query) and self.sphinx:
             # Use Sphinx to search on document content
-            sql = self.CreateSphinxQueryString(query)
-            cursor = self.db.cursor()
-            sphcur = self.sphinx.cursor()
-            sphcur.execute(sql)
-            sphinx_rows = list((str(docid), rel, mimetype) for docid, rel, mimetype in sphcur)
-            if len(sphinx_rows):
-                snippets = self.fetch_snippets(query, sphinx_rows, cursor, sphcur)
-                # Fetch commit attributes from MySQL
-                sql = self.CreateIdQueryString((docid for (docid, _, _) in sphinx_rows))
-                cursor.execute(sql)
-                byid = {}
-                for row in cursor:
-                    byid[str(row[0])] = row
-                nrows = []
-                for docid, rel, _ in sphinx_rows:
-                    if docid in byid:
-                        if docid in snippets:
-                            nrows.append(byid[docid] + (rel, snippets[docid]))
-                        else:
-                            nrows.append(byid[docid] + (rel, ''))
-                rows = nrows
-            else:
-                rows = []
+            rows = self.RunSphinxQuery(query)
         else:
             # Use regular queries when document content is not searched
-            sql = self.CreateSQLQueryString(query)
-            cursor = self.db.cursor()
-            cursor.execute(sql)
-            rows = list(cursor)
+            rows = selectall(self.db, self.CreateSQLQueryString(query))
+            # Check rights
+            rows = r for r in rows if self.check_commit_access(
+                r['repository_name'],
+                r['dir_name'],
+                r['file_name'],
+                r['revision'])
 
         # Convert rows to commit objects
         for row in rows:
-            (dbId, dbType, dbCI_When, dbAuthorID, dbRepositoryID, dbDirID,
-             dbFileID, dbRevision, dbStickyTag, dbBranchID, dbAddedLines,
-             dbRemovedLines, dbDescID, dbRepositoryName, dbDirName,
-             dbFileName, dbRelevance, dbSnippet) = row
-
-            if not self.check_commit_access(dbRepositoryName, dbDirName, dbFileName, dbRevision):
-                continue
-
             commit = LazyCommit(self)
-            if dbType == 'Add':
+            if row['type'] == 'Add':
                 commit.SetTypeAdd()
-            elif dbType == 'Remove':
+            elif row['type'] == 'Remove':
                 commit.SetTypeRemove()
             else:
                 commit.SetTypeChange()
 
-            commit.SetTime(dbi.TicksFromDateTime(dbCI_When))
-            commit.SetFileID(dbFileID)
-            commit.SetDirectoryID(dbDirID)
-            commit.SetRevision(dbRevision)
-            commit.SetRepositoryID(dbRepositoryID)
-            commit.SetAuthorID(dbAuthorID)
-            commit.SetBranchID(dbBranchID)
-            commit.SetPlusCount(dbAddedLines)
-            commit.SetMinusCount(dbRemovedLines)
-            commit.SetDescriptionID(dbDescID)
-            commit.SetRelevance(dbRelevance)
-            commit.SetSnippet(dbSnippet)
+            commit.SetTime(dbi.TicksFromDateTime(row['ci_when']))
+            commit.SetFileID(row['fileid'])
+            commit.SetDirectoryID(row['dirid'])
+            commit.SetRevision(row['revision'])
+            commit.SetRepositoryID(row['repositoryid'])
+            commit.SetAuthorID(row['authorid'])
+            commit.SetBranchID(row['branchid'])
+            commit.SetPlusCount(row['addedlines'])
+            commit.SetMinusCount(row['removedlines'])
+            commit.SetDescriptionID(row['descid'])
+            commit.SetRelevance(row['relevance'])
+            commit.SetSnippet(row['snippet'])
 
             query.AddCommit(commit)
 
@@ -745,6 +793,7 @@ class CheckinDatabase:
 
         return commit
 
+    # Now unused
     def sql_delete(self, table, key, value, keep_fkey = None):
         sql = "DELETE FROM %s WHERE %s=%%s" % (table, key)
         sql_args = (value, )
@@ -1114,30 +1163,11 @@ def CreateCheckinQuery():
     return CheckinDatabaseQuery()
 
 def ConnectDatabase(cfg, authorizer=None, readonly=0):
-    if readonly:
-        user = cfg.cvsdb.readonly_user
-        passwd = cfg.cvsdb.readonly_passwd
-    else:
-        user = cfg.cvsdb.user
-        passwd = cfg.cvsdb.passwd
     db = CheckinDatabase(
-        host = cfg.cvsdb.host,
-        port = cfg.cvsdb.port,
-        socket = cfg.cvsdb.socket,
-        user = user,
-        passwd = passwd,
-        database = cfg.cvsdb.database_name,
-        row_limit = cfg.cvsdb.row_limit,
-        min_relevance = cfg.cvsdb.fulltext_min_relevance,
+        readonly = readonly,
         authorizer = authorizer,
-        index_content = cfg.cvsdb.index_content,
-        enable_snippets = cfg.cvsdb.enable_snippets,
-        sphinx_host = cfg.cvsdb.sphinx_host,
-        sphinx_port = int(cfg.cvsdb.sphinx_port),
-        sphinx_socket = cfg.cvsdb.sphinx_socket,
-        sphinx_index = cfg.cvsdb.sphinx_index,
-        content_max_size = cfg.cvsdb.content_max_size,
-        cfg = cfg,
+        cfg = cfg.cvsdb,
+        guesser = cfg.guesser(),
     )
     db.Connect()
     return db
