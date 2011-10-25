@@ -624,8 +624,11 @@ class CheckinDatabase:
 
         return sql
 
+    # Check access to dir/file in repository repos
     def check_commit_access(self, repos, dir, file, rev):
         r = self.request.get_repo(repos)
+        if not r:
+            return False
         if r.auth:
             rootname = repos.split('/')
             rootname = rootname.pop()
