@@ -3811,11 +3811,11 @@ def build_commit(request, files, max_files, dir_strip, format):
       return None
     if my_repos.roottype == 'cvs':
       # we store UTF8 in the DB
-      try: where = where.decode('utf-8')
-      except: pass
       # FIXME maybe also store "real" non-UTF8 filesystem path in the DB instead of having such setting?
-      try: where = where.encode(cfg.options.cvs_ondisk_charset)
-      except: pass
+      try:
+        where = where.decode('utf-8').encode(cfg.options.cvs_ondisk_charset)
+      except:
+        raise Exception("Invalid string encoding: "+where)
     path_parts = _path_parts(where)
 
     # In CVS, we can actually look at deleted revisions; in Subversion

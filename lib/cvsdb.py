@@ -1188,6 +1188,7 @@ def ConnectDatabase(cfg, request=None, readonly=0):
 def ConnectDatabaseReadOnly(cfg, request):
     return ConnectDatabase(cfg, request, 1)
 
+# Get all commits from rcsfile (CVS)
 def GetCommitListFromRCSFile(repository, path_parts, revision=None):
     commit_list = []
 
@@ -1227,6 +1228,7 @@ def GetCommitListFromRCSFile(repository, path_parts, revision=None):
 
     return commit_list
 
+# Get unrecorded commits from rcsfile (CVS)
 def GetUnrecordedCommitList(repository, path_parts, db):
     commit_list = GetCommitListFromRCSFile(repository, path_parts)
 

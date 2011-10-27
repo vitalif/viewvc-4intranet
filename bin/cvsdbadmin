@@ -47,12 +47,12 @@ import vclib.ccvs
 from stat import *
   
 
-def UpdateFile(db, repository, path, update, latest_checkin, quiet_level):
+def UpdateFile(db, repository, path, update, latest_checkin, quiet_level, encoding = None):
     try:
         if update:
             mtime = os.stat(repository.rcsfile(path, 1))[ST_MTIME]
             if mtime < latest_checkin:
-              return
+                return
             commit_list = cvsdb.GetUnrecordedCommitList(repository, path, db)
         else:
             commit_list = cvsdb.GetCommitListFromRCSFile(repository, path)
@@ -75,6 +75,8 @@ def UpdateFile(db, repository, path, update, latest_checkin, quiet_level):
 
     ## add the commits into the database
     for commit in commit_list:
+        if encoding:
+            commit.SetFile(commit.GetFile().decode(encoding).encode('utf-8'))
         db.AddCommit(commit)
         if printing:
             sys.stdout.write('.')
@@ -84,7 +86,7 @@ def UpdateFile(db, repository, path, update, latest_checkin, quiet_level):
 
 
 def RecurseUpdate(db, repository, directory, update, latest_checkin,
-                  quiet_level):
+                  quiet_level, encoding = None):
     for entry in repository.listdir(directory, None, {}):
         path = directory + [entry.name]
 
@@ -93,12 +95,13 @@ def RecurseUpdate(db, repository, directory, update, latest_checkin,
 
         if entry.kind is vclib.DIR:
             RecurseUpdate(db, repository, path, update, latest_checkin,
-                          quiet_level)
+                          quiet_level, encoding)
             continue
 
         if entry.kind is vclib.FILE:
             UpdateFile(db, repository, path, update, latest_checkin,
-                       quiet_level)
+                       quiet_level, encoding)
+
 
 def RootPath(path, quiet_level):
     """Break os path into cvs root path and other parts"""
@@ -200,9 +203,10 @@ if __name__ == '__main__':
             if latest_checkin is None:
                 command = 'rebuild'
             RecurseUpdate(db, repository, path_parts,
-                          command == 'update', latest_checkin, quiet_level)
+                          command == 'update', latest_checkin, quiet_level,
+                          cfg.options.cvs_ondisk_charset)
     except KeyboardInterrupt:
         print
         print '** break **'
-        
+
     sys.exit(0)

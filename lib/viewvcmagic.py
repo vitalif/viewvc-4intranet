@@ -35,10 +35,12 @@ class ContentMagic:
 
     # returns (utf8_content, charset)
     def guess_charset(self, content):
-        # Try to guess with chardet
-        charset = None
-        if have_chardet:
-            # Try chardet
+        # Try UTF-8
+        charset = 'utf-8'
+        try: content = content.decode('utf-8')
+        except: charset = None
+        if charset is None and have_chardet:
+            # Try to guess with chardet
             try:
                 # Only detect on first 256KB if content is longer
                 if len(content) > 256*1024:
@@ -55,11 +57,6 @@ class ContentMagic:
                     except: content = content.decode(charset)
                 else:
                     content = content.decode(charset)
-            except: charset = None
-        else:
-            # Try UTF-8
-            charset = 'utf-8'
-            try: content = content.decode('utf-8')
             except: charset = None
         # Then try to guess primitively
         if charset is None:
