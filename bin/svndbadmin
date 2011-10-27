@@ -322,10 +322,24 @@ class SvnRev:
                         os.path.basename(change.path),
                         diffobj.tempfile2
                     )
+                    # Read and guess charset by ourselves for text files
+                    if mime and mime.startswith('text/') or (mime.startswith('application/') and mime.endswith('xml')):
+                        try:
+                            fd = open(diffobj.tempfile2, 'rb')
+                            content = fd.read()
+                            fd.close()
+                        except: pass
+                        # Guess charset
+                        if content:
+                            content, charset = repo.guesser.guess_charset(content)
+                            if charset:
+                                content = content.encode('utf-8')
+                                if repo.verbose:
+                                    print 'Guessed %s for %s' % (charset, change.path)
+                            elif repo.verbose:
+                                print 'Failed to guess charset for %s, not indexing' % (change.path, )
                     # Try to extract content using Tika from binary documents
-                    # Do not index contents of text files - it can be easily retrieved later
-                    if (mime and not mime.startswith('text/') and not
-                        (mime.startswith('application/') and mime.endswith('xml'))):
+                    elif repo.tika_client:
                         content = repo.tika_client.get_text(diffobj.tempfile2, mime, change.path)
             self.changes.append((path, action, plus, minus, content, mime))
 

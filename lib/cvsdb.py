@@ -416,7 +416,11 @@ class CheckinDatabase:
                     )
                     # Sphinx (at least 2.0.1) still caches all string attributes
                     # inside RAM, so we'll store contents in MySQL
-                    if self.enable_snippets:
+                    # Do not store contents of text files - it can be easily retrieved later
+                    mime = props['mimetype']
+                    if (self.enable_snippets and not (mime and
+                        (mime.startswith('text/') or
+                        mime.startswith('application/') and mime.endswith('xml')))):
                         cursor.execute('INSERT INTO contents SET id=%s, content=%s', (commit_id, content))
         except Exception, e:
             print ("Error adding commit: '"+str(e)+"'\nValues were:\n"+
