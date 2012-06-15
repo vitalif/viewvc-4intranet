@@ -4911,6 +4911,38 @@ def query_patch(request, commits):
     except:
       pass
 
+# --- START UGLY HACK ---
+# FIXME Remove this from here to some hook package
+# CustIS "patcher" format for PL/SQL packages (Bug 96691)
+# <put file="../i-basket/pi_shp_basket_cards.sp4" revision="1.364" schema="*ADMIN"/>
+def query_custispatcher(request, commits):
+  request.server.header('text/plain')
+  if not commits:
+    print '# No changes were selected by the query.'
+    print '# There is nothing to show.'
+    return
+  header_re = re.compile('_package\s*\(\s*[^,]*,\s*([^,\s]+)')
+  r = ''
+  for commit in commits:
+    for fileinfo in commit.files:
+      fn = _path_join([fileinfo.dir, fileinfo.file])
+      parts = _path_parts(fn)
+      fd, _ = fileinfo.root.repos.openfile(parts, fileinfo.rev)
+      header = fd.read(4096)
+      fd.close()
+      schema = header_re.search(header)
+      if schema:
+        schema = schema.group(1)
+      if fn.startswith('sm-code/shop'):
+        fn = '..' + fn[12:]
+      r += '<put file="'+fn+'" revision="'+fileinfo.rev+'"'
+      if schema:
+        r += ' schema="'+schema+'"'
+      r += ' />\n'
+  server_fp = get_writeready_server_file(request, 'text/plain')
+  server_fp.write(r)
+# --- END UGLY HACK ---
+
 def view_query(request):
   if not is_query_supported(request):
     raise debug.ViewVCException('Can not query project root "%s" at "%s".'
@@ -5156,6 +5188,10 @@ def view_query(request):
 
   if format == 'patch':
     query_patch(request, commits)
+    return
+
+  if format == 'custispatcher':
+    query_custispatcher(request, commits)
     return
 
   data = common_template_data(request)
