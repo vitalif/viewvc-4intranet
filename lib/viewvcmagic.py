@@ -39,7 +39,7 @@ class ContentMagic:
         charset = 'utf-8'
         try: content = content.decode('utf-8')
         except: charset = None
-        if charset is None and have_chardet:
+        if charset is None and have_chardet and len(content) > 64:
             # Try to guess with chardet
             try:
                 # Only detect on first 256KB if content is longer
