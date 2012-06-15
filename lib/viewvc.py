@@ -4925,22 +4925,30 @@ def query_custispatcher(request, commits):
   r = ''
   for commit in commits:
     for fileinfo in commit.files:
-      fn = _path_join([fileinfo.dir, fileinfo.file])
-      parts = _path_parts(fn)
-      fd, _ = fileinfo.root.repos.openfile(parts, fileinfo.rev)
-      header = fd.read(4096)
-      fd.close()
-      schema = header_re.search(header)
-      if schema:
-        schema = schema.group(1)
-      if fn.startswith('sm-code/shop'):
-        fn = '..' + fn[12:]
-      r += '<put file="'+fn+'" revision="'+fileinfo.rev+'"'
-      if schema:
-        r += ' schema="'+schema+'"'
-      r += ' />\n'
+      if fileinfo.file.endswith('.sp4'):
+        fn = _path_join([fileinfo.dir, fileinfo.file])
+        parts = _path_parts(fn)
+        fd, _ = fileinfo.root.repos.openfile(parts, fileinfo.rev)
+        header = fd.read(4096)
+        fd.close()
+        schema = header_re.search(header)
+        if schema:
+          schema = schema.group(1)
+        if fn.startswith('sm-code/shop'):
+          fn = '..' + fn[12:]
+        r += '<put file="'+fn+'" revision="'+fileinfo.rev+'"'
+        if schema:
+          r += ' schema="'+schema+'"'
+        r += ' />\n'
   server_fp = get_writeready_server_file(request, 'text/plain')
   server_fp.write(r)
+
+def found_custispatcher_sp4(commits):
+  for commit in commits:
+    for fileinfo in commit.files:
+      if fileinfo.file.endswith('.sp4'):
+        return 1
+  return 0
 # --- END UGLY HACK ---
 
 def view_query(request):
@@ -5150,6 +5158,17 @@ def view_query(request):
   params['format'] = 'patch'
   patch_href = request.get_url(params=params, escape=1)
 
+  # --- BEGIN UGLY HACK ---
+  # FIXME Remove this from here to some hook package
+  # CustIS "patcher" format for PL/SQL packages (Bug 96691)
+  if found_custispatcher_sp4(commits):
+    params = request.query_dict.copy()
+    params['format'] = 'custispatcher'
+    custispatcher_href = request.get_url(params=params, escape=1)
+  else:
+    custispatcher_href = None
+  # --- END UGLY HACK ---
+
   # rss link
   params = request.query_dict.copy()
   params['format'] = 'rss'
@@ -5217,6 +5236,11 @@ def view_query(request):
     'limit_changes': limit_changes,
     'limit_changes_href': limit_changes_href,
     'rss_link_href': rss_link_href,
+    # --- BEGIN UGLY HACK ---
+    # FIXME Remove this from here to some hook package
+    # CustIS "patcher" format for PL/SQL packages (Bug 96691)
+    'custispatcher_href': custispatcher_href,
+    # --- END UGLY HACK ---
     }))
   if format == 'rss':
     generate_page(request, "rss", data, "application/rss+xml")
