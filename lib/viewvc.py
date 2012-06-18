@@ -4921,25 +4921,36 @@ def query_custispatcher(request, commits):
     print '# No changes were selected by the query.'
     print '# There is nothing to show.'
     return
-  header_re = re.compile('_package\s*\(\s*[^,]*,\s*([^,\s]+)')
-  r = ''
+  header_re = re.compile('^\s*_package\s*\(\s*[^,]*,\s*([^,\s]+)', re.M)
+  by_fn = {}
   for commit in commits:
     for fileinfo in commit.files:
       if fileinfo.file.endswith('.sp4'):
         fn = _path_join([fileinfo.dir, fileinfo.file])
-        parts = _path_parts(fn)
-        fd, _ = fileinfo.root.repos.openfile(parts, fileinfo.rev)
-        header = fd.read(4096)
-        fd.close()
-        schema = header_re.search(header)
-        if schema:
-          schema = schema.group(1)
-        if fn.startswith('sm-code/shop'):
-          fn = '..' + fn[12:]
-        r += '<put file="'+fn+'" revision="'+fileinfo.rev+'"'
-        if schema:
-          r += ' schema="'+schema+'"'
-        r += ' />\n'
+        # Only latest revision of each file
+        if fn not in by_fn or rev_cmp(by_fn[fn][1], fileinfo.rev) < 0:
+          parts = _path_parts(fn)
+          fd, _ = fileinfo.root.repos.openfile(parts, fileinfo.rev)
+          header = fd.read(4096)
+          fd.close()
+          # Try to find _package() declaration with schema in file header
+          schema = header_re.search(header)
+          if schema:
+            schema = schema.group(1)
+          else:
+            schema = ''
+          if fn.startswith('sm-code/shop'):
+            fn = '..' + fn[12:]
+          s = '<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*'+schema+'" />\n'
+          by_fn[fn] = [s, fileinfo.rev, schema]
+  # Put schema OWNER first
+  r = ''
+  for i in by_fn:
+    if by_fn[i][2] == 'OWNER':
+      r += by_fn[i][0]
+      del by_fn[i]
+  for i in by_fn:
+    r += by_fn[i][0]
   server_fp = get_writeready_server_file(request, 'text/plain')
   server_fp.write(r)
 
