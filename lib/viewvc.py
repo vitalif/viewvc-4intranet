@@ -4939,8 +4939,9 @@ def query_custispatcher(request, commits):
             schema = schema.group(1)
           else:
             schema = ''
-          if fn.startswith('sm-code/shop'):
-            fn = '..' + fn[12:]
+          rfn = fn
+          if rfn.startswith('sm-code/shop'):
+            rfn = '..' + fn[12:]
           s = '<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*'+schema+'" />\n'
           by_fn[fn] = [s, fileinfo.rev, schema]
   # Put schema OWNER first
