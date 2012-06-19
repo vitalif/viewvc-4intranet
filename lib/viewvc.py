@@ -4945,12 +4945,13 @@ def query_custispatcher(request, commits):
           by_fn[fn] = [s, fileinfo.rev, schema]
   # Put schema OWNER first
   r = ''
+  r2 = ''
   for i in by_fn:
     if by_fn[i][2] == 'OWNER':
       r += by_fn[i][0]
-      del by_fn[i]
-  for i in by_fn:
-    r += by_fn[i][0]
+    else:
+      r2 += by_fn[i][0]
+  r += r2
   server_fp = get_writeready_server_file(request, 'text/plain')
   server_fp.write(r)
 
