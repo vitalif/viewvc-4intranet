@@ -456,7 +456,7 @@ class CheckinDatabase:
                 match = ''
                 sqlList.append(field+' IN ('+string.join(map(lambda x: self.db.literal(x), data), ',')+')')
             if match != '':
-              sqlList.append("%s%s%s" % (field, match, self.db.literal(data)))
+                sqlList.append("%s%s%s" % (field, match, self.db.literal(data)))
 
         return "(%s)" % (string.join(sqlList, " OR "))
 
@@ -1120,6 +1120,10 @@ class CheckinDatabaseQuery:
         self.content_query = query
 
     def SetRepository(self, repository, match = "exact"):
+        if match == 'exact' and repository.find('/') == -1:
+            # Exact match on the last part of repository name
+            match = 'like'
+            repository = '%/' + repository.replace('%', '\\%')
         self.repository_list.append(QueryEntry(repository, match))
 
     def SetBranch(self, branch, match = "exact"):
