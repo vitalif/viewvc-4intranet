@@ -410,7 +410,7 @@ class CheckinDatabase:
                     del props['descid']
                     del props['type']
                     sphcur.execute(
-                        'INSERT INTO '+self.sphinx_index+'('+','.join(i for i in props)+') VALUES ('+
+                        'REPLACE INTO '+self.sphinx_index+'('+','.join(i for i in props)+') VALUES ('+
                         ','.join('%s' for i in props)+')',
                         tuple(props[i] for i in props)
                     )
@@ -421,7 +421,10 @@ class CheckinDatabase:
                     if (self.enable_snippets and not (mime and
                         (mime.startswith('text/') or
                         mime.startswith('application/') and mime.endswith('xml')))):
-                        cursor.execute('INSERT INTO contents SET id=%s, content=%s', (commit_id, content))
+                        cursor.execute(
+                            'INSERT INTO contents SET id=%s, content=%s ON DUPLICATE KEY UPDATE id=id',
+                            (commit_id, content)
+                        )
         except Exception, e:
             print ("Error adding commit: '"+str(e)+"'\nValues were:\n"+
                 "\n".join(i+'='+str(props[i]) for i in props))
