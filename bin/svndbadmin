@@ -428,7 +428,7 @@ def main(command, repository, revs=[], verbose=0, force=0):
     )
     if command == 'rebuild' or (command == 'update' and not revs):
         for rev in range(repo.rev_max+1):
-            handle_revision(db, command, repo, rev, verbose)
+            handle_revision(db, command, repo, rev, verbose, force)
     elif command == 'update':
         if revs[0] is None:
             revs[0] = repo.rev_max
