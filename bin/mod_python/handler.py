@@ -20,10 +20,8 @@ import os.path
 def handler(req):
   path, module_name = os.path.split(req.filename)
   module_name, module_ext = os.path.splitext(module_name)
-  try:
-    module = apache.import_module(module_name, path=[path])
-  except ImportError:
-    raise apache.SERVER_RETURN, apache.HTTP_NOT_FOUND
+  # Let it be 500 Internal Server Error in case of import error
+  module = apache.import_module(module_name, path=[path])
 
   req.add_common_vars()
   module.index(req)
