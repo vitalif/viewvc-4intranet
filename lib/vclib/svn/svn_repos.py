@@ -24,7 +24,7 @@ import time
 import tempfile
 import popen
 import re
-from svn import fs, repos, core, client, delta
+from svn import fs, repos, core, client, delta, diff
 
 
 ### Require Subversion 1.3.1 or better.
@@ -321,8 +321,8 @@ class BlameSource:
     try:
       ### TODO: Is this use of FIRST_REV always what we want?  Should we
       ### pass 1 here instead and do filtering later?
-      client.blame2(local_url, _rev2optrev(rev), _rev2optrev(first_rev),
-                    _rev2optrev(rev), self._blame_cb, ctx)
+      client.blame3(local_url, _rev2optrev(rev), _rev2optrev(first_rev),
+                    _rev2optrev(rev), diff.svn_diff_file_options_t(), True, self._blame_cb, ctx)
     except core.SubversionException, e:
       _fix_subversion_exception(e)
       if e.apr_err == core.SVN_ERR_CLIENT_IS_BINARY_FILE:
