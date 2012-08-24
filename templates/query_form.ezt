@@ -14,6 +14,12 @@ Browse Directory</a></p>
 <div class="vc_query_form">
   [for query_hidden_values]<input type="hidden" name="[query_hidden_values.name]" value="[query_hidden_values.value]"/>[end]
 <table cellspacing="0" cellpadding="5" class="auto">
+  [if-any enable_search_content]
+  <tr>
+    <th style="text-align:right;vertical-align:top;">Search content:</th>
+    <td><input type="text" name="search_content" value="[search_content]" size="60" /></td>
+  </tr>
+  [end]
   <tr>
     <th style="text-align:right;vertical-align:top;">Repository:</th>
     <td>
@@ -172,12 +178,6 @@ Browse Directory</a></p>
       </label>
     </td>
   </tr>
-  [if-any enable_search_content]
-  <tr>
-    <th style="text-align:right;vertical-align:top;">Search content:</th>
-    <td><input type="text" name="search_content" value="[search_content]" size="60" /></td>
-  </tr>
-  [end]
   <tr>
     <th style="text-align:right;vertical-align:top;">Sort By:</th>
     <td>

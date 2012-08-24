@@ -3641,7 +3641,7 @@ def view_queryform(request):
     'comment_match' : request.query_dict.get('comment_match', 'fulltext'),
     'search_content' : request.query_dict.get('search_content', ''),
     'querysort' : request.query_dict.get('querysort', 'date'),
-    'date' : request.query_dict.get('date', 'hours'),
+    'date' : request.query_dict.get('date', 'week'),
     'hours' : request.query_dict.get('hours', '2'),
     'mindate' : request.query_dict.get('mindate', ''),
     'maxdate' : request.query_dict.get('maxdate', ''),
