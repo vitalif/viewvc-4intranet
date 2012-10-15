@@ -648,7 +648,7 @@ class CheckinDatabase:
     def get_snippet(self, sph, content, query, mimetype):
         sph.execute(
             'CALL SNIPPETS(%s, %s, %s'+self.snippet_options_str+')',
-            (content, self.sphinx_index, query) + tuple(self.snippet_options.values())
+            (content[0:self.content_max_size-1], self.sphinx_index, query) + tuple(self.snippet_options.values())
         )
         s, = sph.fetchone()
         s = cgi.escape(s)
