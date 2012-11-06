@@ -4927,45 +4927,52 @@ def query_custispatcher(request, commits):
   for commit in commits:
     found = 0
     for fileinfo in commit.files:
-      if fileinfo.file.endswith('.sp4'):
+      ext = fileinfo.file.lower()
+      sp4 = ext.endswith('.sp4')
+      xml = ext.endswith('.xml')
+      if sp4 or xml:
         found = 1
         fn = _path_join([fileinfo.dir, fileinfo.file])
         # Only latest revision of each file
         if fn not in by_fn or rev_cmp(by_fn[fn][1], fileinfo.rev) < 0:
-          parts = _path_parts(fn)
-          fd, _ = fileinfo.root.repos.openfile(parts, fileinfo.rev)
-          header = fd.read(4096)
-          fd.close()
-          # Try to find _package() declaration with schema in file header
-          schema = header_re.search(header)
-          if schema:
-            schema = schema.group(1)
-          else:
-            schema = ''
-          rfn = fn
-          if rfn.startswith('sm-code/shop'):
-            rfn = '..' + fn[12:]
-          s = '<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*'+schema+'" />\n'
+          if sp4:
+            parts = _path_parts(fn)
+            fd, _ = fileinfo.root.repos.openfile(parts, fileinfo.rev)
+            header = fd.read(4096)
+            fd.close()
+            # Try to find _package() declaration with schema in file header
+            schema = header_re.search(header)
+            if schema:
+              schema = schema.group(1)
+            else:
+              schema = ''
+            s = '<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*'+schema+'" />\n'
+          elif xml:
+            schema = 'HARDCODE'
+            s = '\n<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*OWNER" />\n'+\
+              '  <proc name="store-dyn"/>\n  <proc name="package-get"/>\n'+\
+              '  <proc name="trigger"/>\n  <proc name="grant"/>\n</put>\n'+\
+              '<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*ADMIN" />\n'+\
+              '  <proc name="ini"/>\n  <proc name="ini-gen"/>\n</put>\n'
           by_fn[fn] = [s, fileinfo.rev, schema]
-      elif fileinfo.file.endswith('.xml'):
-        found = 1
-        pass
     if found:
-      msgs[re.sub(r'<[^>]*?>', '', commit.short_log).replace('&nbsp;', '').strip()] = 1
+      msgs[re.sub(r'<[^>]*?>', '', commit.short_log).replace('&nbsp;', ' ').strip().encode('utf-8')] = 1
   r = ''
   r2 = ''
+  r3 = ''
   # Put commit messages first
-#  if len(msgs):
-#    r += '<!-- '
-#    for i in msgs:
-#      r += 
-  # Then schema OWNER
+  if len(msgs):
+    r += '<!-- '+'\n'.join(msgs.keys())+' -->\n'
+  # Then schema OWNER, then others, then XML files
   for i in by_fn:
     if by_fn[i][2] == 'OWNER':
       r += by_fn[i][0]
+    elif by_fn[i][2] == 'HARDCODE':
+      r3 += by_fn[i][0]
     else:
       r2 += by_fn[i][0]
   r += r2
+  r += r3
   server_fp = get_writeready_server_file(request, 'text/plain')
   server_fp.write(r)
 
