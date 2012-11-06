@@ -4923,9 +4923,12 @@ def query_custispatcher(request, commits):
     return
   header_re = re.compile('^\s*_package\s*\(\s*[^,]*,\s*([^,\s]+)', re.M)
   by_fn = {}
+  msgs = {}
   for commit in commits:
+    found = 0
     for fileinfo in commit.files:
       if fileinfo.file.endswith('.sp4'):
+        found = 1
         fn = _path_join([fileinfo.dir, fileinfo.file])
         # Only latest revision of each file
         if fn not in by_fn or rev_cmp(by_fn[fn][1], fileinfo.rev) < 0:
@@ -4944,9 +4947,19 @@ def query_custispatcher(request, commits):
             rfn = '..' + fn[12:]
           s = '<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*'+schema+'" />\n'
           by_fn[fn] = [s, fileinfo.rev, schema]
-  # Put schema OWNER first
+      elif fileinfo.file.endswith('.xml'):
+        found = 1
+        pass
+    if found:
+      msgs[re.sub(r'<[^>]*?>', '', commit.short_log).replace('&nbsp;', '').strip()] = 1
   r = ''
   r2 = ''
+  # Put commit messages first
+#  if len(msgs):
+#    r += '<!-- '
+#    for i in msgs:
+#      r += 
+  # Then schema OWNER
   for i in by_fn:
     if by_fn[i][2] == 'OWNER':
       r += by_fn[i][0]
