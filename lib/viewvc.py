@@ -4949,10 +4949,10 @@ def query_custispatcher(request, commits):
             s = '<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*'+schema+'" />\n'
           elif xml:
             schema = 'HARDCODE'
-            s = '\n<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*OWNER" />\n'+\
+            s = '\n<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*OWNER">\n'+\
               '  <proc name="store-dyn"/>\n  <proc name="package-get"/>\n'+\
               '  <proc name="trigger"/>\n  <proc name="grant"/>\n</put>\n'+\
-              '<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*ADMIN" />\n'+\
+              '<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*ADMIN">\n'+\
               '  <proc name="ini"/>\n  <proc name="ini-gen"/>\n</put>\n'
           by_fn[fn] = [s, fileinfo.rev, schema]
     if found:
