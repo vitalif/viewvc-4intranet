@@ -95,6 +95,9 @@ class CheckinDatabase:
     def Connect(self):
         self.db = dbi.connect(
             self._host, self._port, self._socket, self._user, self._passwd, self._database)
+        # MySQL 5.5+ will say it's unsafe, really it isn't because
+        # we specify values only for one unique key
+        warnings.filterwarnings('ignore', 'Unsafe statement written to the binary log')
         cursor = self.db.cursor()
         cursor.execute("SET AUTOCOMMIT=1")
         table_list = self.GetTableList()
@@ -385,17 +388,13 @@ class CheckinDatabase:
 
         cursor = self.db.cursor()
         try:
-            with warnings.catch_warnings():
-                # MySQL-specific INSERT-or-UPDATE with ID retrieval
-                # MySQL 5.5+ will say it's unsafe, really it isn't because
-                # we specify values only for one unique key
-                warnings.filterwarnings('ignore', 'ON DUPLICATE KEY UPDATE.*is unsafe')
-                cursor.execute(
-                    'INSERT INTO '+commits_table+'('+','.join(i for i in props)+') VALUES ('+
-                    ', '.join('%s' for i in props)+') ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), '+
-                    ', '.join(i+'=VALUES('+i+')' for i in props),
-                    tuple(props[i] for i in props)
-                )
+            # MySQL-specific INSERT-or-UPDATE with ID retrieval
+            cursor.execute(
+                'INSERT INTO '+commits_table+'('+','.join(i for i in props)+') VALUES ('+
+                ', '.join('%s' for i in props)+') ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), '+
+                ', '.join(i+'=VALUES('+i+')' for i in props),
+                tuple(props[i] for i in props)
+            )
             commit_id = cursor.lastrowid
             if self.index_content:
                 sphcur = self.sphinx.cursor()
