@@ -278,7 +278,9 @@ class SvnRev:
             if change.base_path:
                 base_root = self._get_root_for_rev(change.base_rev)
 
-            if not change.path:
+            # :( f*cking undocumented python-subversion!
+            # change.action: modify=0, add=1, delete=2, replace=3
+            if change.action == 2 or not change.path:
                 action = 'remove'
             elif change.added:
                 action = 'add'
@@ -287,8 +289,8 @@ class SvnRev:
 
             diffobj = svn.fs.FileDiff(base_root and base_root or None,
                                       base_root and change.base_path or None,
-                                      change.path and fsroot or None,
-                                      change.path and change.path or None,
+                                      action != 'remove' and change.path and fsroot or None,
+                                      action != 'remove' and change.path and change.path or None,
                                       None,
                                       ['-b', '-B'])
             diff_fp = diffobj.get_pipe()
@@ -306,7 +308,7 @@ class SvnRev:
             mime = ''
             # need to check if binary file's content changed when copying,
             # if not, don't extract it, just get it from previous revision later
-            if repo.index_content and change.path and (not change.base_path
+            if repo.index_content and action != 'remove' and change.path and (not change.base_path
                 or svn.fs.contents_changed(
                     base_root and base_root or None,
                     base_root and change.base_path or None,
