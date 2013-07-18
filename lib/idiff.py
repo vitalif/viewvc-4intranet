@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 1999-2006 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -19,8 +19,10 @@ from __future__ import generators
 import difflib
 import sys
 import re
+
+from common import _item, _RCSDIFF_NO_CHANGES
 import ezt
-import cgi
+import sapi
 
 def sidebyside(fromlines, tolines, context):
   """Generate side by side diff"""
@@ -29,6 +31,7 @@ def sidebyside(fromlines, tolines, context):
   line_strip = lambda line: line.rstrip("\n")
   fromlines = map(line_strip, fromlines)
   tolines = map(line_strip, tolines)
+  had_changes = 0
 
   gap = False
   for fromdata, todata, flag in difflib._mdiff(fromlines, tolines, context):
@@ -37,8 +40,11 @@ def sidebyside(fromlines, tolines, context):
     else:
       from_item = _mdiff_split(flag, fromdata)
       to_item = _mdiff_split(flag, todata)
-      yield _item(gap=ezt.boolean(gap), columns=(from_item, to_item))
+      had_changes = 1
+      yield _item(gap=ezt.boolean(gap), columns=(from_item, to_item), type="intraline")
       gap = False
+  if not had_changes:
+    yield _item(type=_RCSDIFF_NO_CHANGES)
 
 _re_mdiff = re.compile("\0([+-^])(.*?)\1")
 
@@ -49,18 +55,18 @@ def _mdiff_split(flag, (line_number, text)):
   while True:
     m = _re_mdiff.search(text, pos)
     if not m:
-      segments.append(_item(text=cgi.escape(text[pos:]), type=None))
+      segments.append(_item(text=sapi.escape(text[pos:]), type=None))
       break
 
     if m.start() > pos:
-      segments.append(_item(text=cgi.escape(text[pos:m.start()]), type=None))
+      segments.append(_item(text=sapi.escape(text[pos:m.start()]), type=None))
 
     if m.group(1) == "+":
-      segments.append(_item(text=cgi.escape(m.group(2)), type="add"))
+      segments.append(_item(text=sapi.escape(m.group(2)), type="add"))
     elif m.group(1) == "-":
-      segments.append(_item(text=cgi.escape(m.group(2)), type="remove"))
+      segments.append(_item(text=sapi.escape(m.group(2)), type="remove"))
     elif m.group(1) == "^":
-      segments.append(_item(text=cgi.escape(m.group(2)), type="change"))
+      segments.append(_item(text=sapi.escape(m.group(2)), type="change"))
 
     pos = m.end()
 
@@ -71,18 +77,25 @@ def unified(fromlines, tolines, context):
 
   diff = difflib.Differ().compare(fromlines, tolines)
   lastrow = None
+  had_changes = 0
 
   for row in _trim_context(diff, context):
     if row[0].startswith("? "):
+      had_changes = 1
       yield _differ_split(lastrow, row[0])
       lastrow = None
     else:
       if lastrow:
+        had_changes = 1
         yield _differ_split(lastrow, None)
       lastrow = row
 
   if lastrow:
+    had_changes = 1
     yield _differ_split(lastrow, None)
+
+  if not had_changes:
+    yield _item(type=_RCSDIFF_NO_CHANGES)
 
 def _trim_context(lines, context_size):
   """Trim context lines that don't surround changes from Differ results
@@ -166,19 +179,15 @@ def _differ_split(row, guide):
 
     for m in _re_differ.finditer(guide, pos):
       if m.start() > pos:
-        segments.append(_item(text=cgi.escape(line[pos:m.start()]), type=None))
-      segments.append(_item(text=cgi.escape(line[m.start():m.end()]),
+        segments.append(_item(text=sapi.escape(line[pos:m.start()]), type=None))
+      segments.append(_item(text=sapi.escape(line[m.start():m.end()]),
                             type="change"))
       pos = m.end()
 
-  segments.append(_item(text=cgi.escape(line[pos:]), type=None))
+  segments.append(_item(text=sapi.escape(line[pos:]), type=None))
 
   return _item(gap=ezt.boolean(gap), type=type, segments=segments,
                left_number=left_number, right_number=right_number)
-
-class _item:
-  def __init__(self, **kw):
-    vars(self).update(kw)
 
 try:
   ### Using difflib._mdiff function here was the easiest way of obtaining

@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- Mode: python -*-
 #
-# Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -17,7 +17,6 @@
 
 import os
 import sys
-import string
 import re
 import traceback
 import py_compile
@@ -27,7 +26,6 @@ import StringIO
 # Get access to our library modules.
 sys.path.insert(0, os.path.join(os.path.dirname(sys.argv[0]), 'lib'))
 
-import compat
 import viewvc
 import compat_ndiff
 version = viewvc.__version__
@@ -49,6 +47,10 @@ CLEAN_MODE = None
 FILE_INFO_LIST = [
     ("bin/cgi/viewvc.cgi",        "bin/cgi/viewvc.cgi",        0755, 1, 0, 0),
     ("bin/cgi/query.cgi",         "bin/cgi/query.cgi",         0755, 1, 0, 0),
+    ("bin/wsgi/viewvc.wsgi",      "bin/wsgi/viewvc.wsgi",      0755, 1, 0, 0),
+    ("bin/wsgi/viewvc.fcgi",      "bin/wsgi/viewvc.fcgi",      0755, 1, 0, 0),
+    ("bin/wsgi/query.wsgi",       "bin/wsgi/query.wsgi",       0755, 1, 0, 0),
+    ("bin/wsgi/query.fcgi",       "bin/wsgi/query.fcgi",       0755, 1, 0, 0),
     ("bin/mod_python/viewvc.py",  "bin/mod_python/viewvc.py",  0755, 1, 0, 0),
     ("bin/mod_python/query.py",   "bin/mod_python/query.py",   0755, 1, 0, 0),
     ("bin/mod_python/handler.py", "bin/mod_python/handler.py", 0755, 1, 0, 0),
@@ -75,11 +77,12 @@ if sys.platform == "win32":
 ## List of directories for installation.
 ##    type (source path,
 ##          destination path,
+##          boolean -- optional item?,
 ##          boolean -- prompt before replacing?)
 TREE_LIST = [
-    ("lib",                       "lib",                       0),
-    ("templates",                 "templates",                 1),
-    ("templates-contrib",         "templates-contrib",         1),
+    ("lib",                       "lib",                       0, 0),
+    ("templates",                 "templates",                 0, 1),
+    ("templates-contrib",         "templates-contrib",         1, 1),
     ]
 
 
@@ -97,14 +100,14 @@ def _escape(str):
     re.escape() is no good because it blindly puts backslashes in
     front of anything that is not a number or letter regardless of
     whether the resulting sequence will be interpreted."""
-    return string.replace(str, "\\", "\\\\")
+    return str.replace("\\", "\\\\")
 
 
 def _actual_src_path(path):
     """Return the real on-disk location of PATH, which is relative to
     the ViewVC source directory."""
     return os.path.join(os.path.dirname(sys.argv[0]),
-                        string.replace(path, '/', os.sep))
+                        path.replace('/', os.sep))
                  
     
 def error(text, etype=None, evalue=None):
@@ -148,7 +151,7 @@ def install_file(src_path, dst_path, mode, subst_path_vars,
     is set, compile the file as a Python module."""
     
     src_path = _actual_src_path(src_path)
-    dst_path = os.path.join(ROOT_DIR, string.replace(dst_path, '/', os.sep))
+    dst_path = os.path.join(ROOT_DIR, dst_path.replace('/', os.sep))
     destdir_path = DESTDIR + dst_path
 
     overwrite = None
@@ -172,7 +175,7 @@ def install_file(src_path, dst_path, mode, subst_path_vars,
         # Collect the '+ ' and '- ' lines.
         diff_lines = []
         looking_at_diff_lines = 0
-        for line in string.split(ndiff_output, '\n'):
+        for line in ndiff_output.split('\n'):
             # Print line if it is a difference line
             if line[:2] == "+ " or line[:2] == "- " or line[:2] == "? ":
                 diff_lines.append(line)
@@ -204,11 +207,13 @@ def install_file(src_path, dst_path, mode, subst_path_vars,
                         temp = raw_input("Do you want to [O]verwrite, [D]o "
                                          "not overwrite, or [V]iew "
                                          "differences? ")
-                    temp = string.lower(temp[0])
+                    if len(temp) == 0:
+                        continue
+                    temp = temp[0].lower()
                     if temp == "v" and ext not in BINARY_FILE_EXTS:
                         print """
 ---------------------------------------------------------------------------"""
-                        print string.join(diff_lines, '\n') + '\n'
+                        print '\n'.join(diff_lines) + '\n'
                         print """
 LEGEND
    A leading '- ' indicates line to remove from installed file
@@ -730,7 +735,7 @@ LEGEND
     dst_parent = os.path.dirname(destdir_path)
     if not os.path.exists(dst_parent):
         try:
-            compat.makedirs(dst_parent)
+            os.makedirs(dst_parent)
             print "   created   %s%s" % (dst_parent, os.sep)
         except os.error, e:
             if e.errno == 17: # EEXIST: file exists
@@ -761,18 +766,22 @@ LEGEND
         py_compile.compile(destdir_path, destdir_path + "c" , dst_path)
 
 
-def install_tree(src_path, dst_path, prompt_replace):
+def install_tree(src_path, dst_path, is_optional, prompt_replace):
     """Install a tree whose source is at SRC_PATH (which is relative
     to the ViewVC source directory) into the location DST_PATH (which
     is relative both to the global ROOT_DIR and DESTDIR settings).  If
     PROMPT_REPLACE is set (and is not overridden by global setting
     CLEAN_MODE), prompt the user for how to deal with already existing
-    files that differ from the to-be-installed version."""
+    files that differ from the to-be-installed version.  If
+    IS_OPTIONAL is set, don't fuss about a missing source item."""
 
     orig_src_path = src_path
     orig_dst_path = dst_path
     src_path = _actual_src_path(src_path)
-    dst_path = os.path.join(ROOT_DIR, string.replace(dst_path, '/', os.sep))
+    dst_path = os.path.join(ROOT_DIR, dst_path.replace('/', os.sep))
+    if not os.path.isdir(src_path):
+        print "   skipping  %s" % (dst_path)
+        return
     destdir_path = os.path.join(DESTDIR + dst_path)
 
     # Get a list of items in the directory.
@@ -792,7 +801,7 @@ def install_tree(src_path, dst_path, prompt_replace):
 
         # If the item is a subdirectory, recurse.  Otherwise, install the file.
         if os.path.isdir(os.path.join(src_path, fname)):
-            install_tree(orig_src_child, orig_dst_child, prompt_replace)
+            install_tree(orig_src_child, orig_dst_child, 0, prompt_replace)
         else:
             set_paths = 0
             compile_it = fname[-3:] == '.py'
@@ -818,7 +827,7 @@ def install_tree(src_path, dst_path, prompt_replace):
             while 1:
                 temp = raw_input("Do you want to [D]elete it, or [L]eave "
                                  "it as is? ")
-                temp = string.lower(temp[0])
+                temp = temp[0].lower()
                 if temp == "l":
                     delete = 0
                 elif temp == "d":
@@ -907,8 +916,7 @@ Just hit [Enter] if a default is okay.
             default = os.path.join(pf, "viewvc-" + version)    
         else:
             default = "/usr/local/viewvc-" + version
-        temp = string.strip(raw_input("Installation path [%s]: " \
-                                      % default))
+        temp = raw_input("Installation path [%s]: " % (default)).strip()
         print
         if len(temp):
             ROOT_DIR = temp
@@ -918,10 +926,8 @@ Just hit [Enter] if a default is okay.
     # Prompt for DESTDIR if none provided.
     if DESTDIR is None:
         default = ''
-        temp = string.strip(raw_input(
-            "DESTDIR path (generally only used by package "
-            "maintainers) [%s]: " \
-            % default))
+        temp = raw_input("DESTDIR path (generally only used by package "
+                         "maintainers) [%s]: " % (default)).strip()
         print
         if len(temp):
             DESTDIR = temp

@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 1999-2006 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -14,7 +14,7 @@ import sys
 import time
 import types
 import re
-import compat
+import calendar
 import MySQLdb
 
 # set to 1 to store commit times in UTC, or 0 to use the ViewVC machine's
@@ -55,7 +55,7 @@ def TicksFromDateTime(datetime):
     t = datetime.tuple()
 
   if utc_time:
-    return compat.timegm(t)
+    return calendar.timegm(t)
   else:
     return time.mktime(t[:8] + (-1,))
     

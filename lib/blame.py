@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*-python-*-
 #
-# Copyright (C) 1999-2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 # Copyright (C) 2000 Curt Hagenlocher <curt@hagenlocher.org>
 #
 # By using this file, you agree to the terms and conditions set forth in
@@ -27,14 +27,14 @@
 # -----------------------------------------------------------------------
 
 import sys
-import string
 import os
 import re
 import time
 import math
-import cgi
-import vclib
 
+from common import _item
+import vclib
+import sapi
 
 re_includes = re.compile('\\#(\\s*)include(\\s*)"(.*?)"')
 
@@ -43,7 +43,7 @@ def link_includes(text, repos, path_parts, include_url):
   if match:
     incfile = match.group(3)
     include_path_parts = path_parts[:-1]
-    for part in filter(None, string.split(incfile, '/')):
+    for part in filter(None, incfile.split('/')):
       if part == "..":
         if not include_path_parts:
           # nothing left to pop; don't bother marking up this include.
@@ -55,14 +55,14 @@ def link_includes(text, repos, path_parts, include_url):
     include_path = None
     try:
       if repos.itemtype(include_path_parts, None) == vclib.FILE:
-        include_path = string.join(include_path_parts, '/')
+        include_path = '/'.join(include_path_parts)
     except vclib.ItemNotFound:
       pass
 
     if include_path:
       return '#%sinclude%s<a href="%s">"%s"</a>' % \
              (match.group(1), match.group(2),
-              string.replace(include_url, '/WHERE/', include_path), incfile)
+              include_url.replace('/WHERE/', include_path), incfile)
     
   return text
 
@@ -75,14 +75,15 @@ class HTMLBlameSource:
     self.path_parts = path_parts
     self.diff_url = diff_url
     self.include_url = include_url
-    self.annotation, self.revision = self.repos.annotate(path_parts, opt_rev)
+    self.annotation, self.revision = self.repos.annotate(path_parts, opt_rev,
+                                                         True)
 
   def __getitem__(self, idx):
     item = self.annotation.__getitem__(idx)
     diff_url = None
     if item.prev_rev:
       diff_url = '%sr1=%s&amp;r2=%s' % (self.diff_url, item.prev_rev, item.rev)
-    thisline = link_includes(cgi.escape(item.text), self.repos,
+    thisline = link_includes(sapi.escape(item.text), self.repos,
                              self.path_parts, self.include_url)
     return _item(text=thisline, line_number=item.line_number,
                  rev=item.rev, prev_rev=item.prev_rev,
@@ -92,11 +93,6 @@ class HTMLBlameSource:
 def blame(repos, path_parts, diff_url, include_url, opt_rev=None):
   source = HTMLBlameSource(repos, path_parts, diff_url, include_url, opt_rev)
   return source, source.revision
-
-
-class _item:
-  def __init__(self, **kw):
-    vars(self).update(kw)
 
 
 def make_html(root, rcs_path):
@@ -136,7 +132,7 @@ def make_html(root, rcs_path):
       sys.stdout.write('<td>&nbsp;</td><td>&nbsp;</td>')
     rev_count = rev_count + 1
 
-    sys.stdout.write('<td%s>%s</td></tr>\n' % (align % 'left', string.rstrip(thisline) or '&nbsp;'))
+    sys.stdout.write('<td%s>%s</td></tr>\n' % (align % 'left', thisline.rstrip() or '&nbsp;'))
   sys.stdout.write('</table>\n')
 
 

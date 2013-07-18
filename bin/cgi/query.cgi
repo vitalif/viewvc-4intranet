@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*-python-*-
 #
-# Copyright (C) 1999-2006 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -34,7 +34,7 @@ CONF_PATHNAME = viewvcinstallpath.CONF_PATHNAME
 
 #########################################################################
 #
-# Adjust sys.path to include our library directory
+# Adjust sys.path to include our library directory.
 #
 
 import sys
@@ -47,6 +47,20 @@ else:
                                                   "../../../lib")))
 
 #########################################################################
+#
+# If admins want nicer processes, here's the place to get them.
+#
+
+#try:
+#  os.nice(20) # bump the nice level of this process
+#except:
+#  pass
+
+
+#########################################################################
+#
+# Go do the work.
+#
 
 import sapi
 import viewvc
@@ -54,4 +68,7 @@ import query
 
 server = sapi.CgiServer()
 cfg = viewvc.load_config(CONF_PATHNAME, server)
-query.main(server, cfg, "viewvc.cgi")
+viewvc_base_url = cfg.query.viewvc_base_url
+if viewvc_base_url is None:
+  viewvc_base_url = "viewvc.cgi"
+query.main(server, cfg, viewvc_base_url)

@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 2006-2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 2006-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -12,18 +12,24 @@
 import vcauth
 import vclib
 import fnmatch
-import string
 
 class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
   """A simple top-level module authorizer."""
   def __init__(self, username, params={}):
     forbidden = params.get('forbidden', '')
-    self.forbidden = map(string.strip,
-                         filter(None, string.split(forbidden, ',')))
+    self.forbidden = map(lambda x: x.strip(),
+                         filter(None, forbidden.split(',')))
 
   def check_root_access(self, rootname):
     return 1
-  
+
+  def check_universal_access(self, rootname):
+    # If there aren't any forbidden paths, we can grant universal read
+    # access.  Otherwise, we make no claim.
+    if not self.forbidden:
+      return 1
+    return None
+    
   def check_path_access(self, rootname, path_parts, pathtype, rev=None):
     # No path?  No problem.
     if not path_parts:

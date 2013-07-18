@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 2008-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -12,7 +12,6 @@
 import vcauth
 import vclib
 import fnmatch
-import string
 import re
 
 
@@ -29,8 +28,8 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
   """A simple regular-expression-based authorizer."""
   def __init__(self, username, params={}):
     forbidden = params.get('forbiddenre', '')
-    self.forbidden = map(lambda x: _split_regexp(string.strip(x)),
-                         filter(None, string.split(forbidden, ',')))
+    self.forbidden = map(lambda x: _split_regexp(x.strip()),
+                         filter(None, forbidden.split(',')))
                          
   def _check_root_path_access(self, root_path):
     default = 1
@@ -46,10 +45,17 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
   def check_root_access(self, rootname):
     return self._check_root_path_access(rootname)
   
+  def check_universal_access(self, rootname):
+    # If there aren't any forbidden regexps, we can grant universal
+    # read access.  Otherwise, we make no claim.
+    if not self.forbidden:
+      return 1
+    return None
+    
   def check_path_access(self, rootname, path_parts, pathtype, rev=None):
     root_path = rootname
     if path_parts:
-      root_path = root_path + '/' + string.join(path_parts, '/')
+      root_path = root_path + '/' + '/'.join(path_parts)
       if pathtype == vclib.DIR:
         root_path = root_path + '/'
     else:

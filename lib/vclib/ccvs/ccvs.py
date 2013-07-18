@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 1999-2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -11,7 +11,6 @@
 # -----------------------------------------------------------------------
 
 import os
-import string
 import re
 import cStringIO
 import tempfile
@@ -23,7 +22,8 @@ import cvsdb
 
 ### The functionality shared with bincvs should probably be moved to a
 ### separate module
-from bincvs import BaseCVSRepository, Revision, Tag, _file_log, _log_path, _logsort_date_cmp, _logsort_rev_cmp
+from bincvs import BaseCVSRepository, Revision, Tag, _file_log, _log_path, _logsort_date_cmp, _logsort_rev_cmp, _path_join
+
 
 class CCVSRepository(BaseCVSRepository):
   def dirlogs(self, path_parts, rev, entries, options):
@@ -45,7 +45,7 @@ class CCVSRepository(BaseCVSRepository):
     """
     if self.itemtype(path_parts, rev) != vclib.DIR:  # does auth-check
       raise vclib.Error("Path '%s' is not a directory."
-                        % (string.join(path_parts, "/")))
+                        % (part2path(path_parts)))
     entries_to_fetch = []
     for entry in entries:
       if vclib.check_path_access(self, path_parts + [entry.name], None, rev):
@@ -97,8 +97,7 @@ class CCVSRepository(BaseCVSRepository):
         dictionary of Tag objects for all tags encountered
     """
     if self.itemtype(path_parts, rev) != vclib.FILE:  # does auth-check
-      raise vclib.Error("Path '%s' is not a file."
-                        % (string.join(path_parts, "/")))
+      raise vclib.Error("Path '%s' is not a file." % (_path_join(path_parts)))
 
     path = self.rcsfile(path_parts, 1)
     sink = TreeSink()
@@ -123,17 +122,15 @@ class CCVSRepository(BaseCVSRepository):
 
   def rawdiff(self, path_parts1, rev1, path_parts2, rev2, type, options={}):
     if path_parts1 and self.itemtype(path_parts1, rev1) != vclib.FILE:  # does auth-check
-      raise vclib.Error("Path '%s' is not a file."
-                        % (string.join(path_parts1, "/")))
+      raise vclib.Error("Path '%s' is not a file." % (_path_join(path_parts1)))
     if path_parts2 and self.itemtype(path_parts2, rev2) != vclib.FILE:  # does auth-check
-      raise vclib.Error("Path '%s' is not a file."
-                        % (string.join(path_parts2, "/")))
+      raise vclib.Error("Path '%s' is not a file." % (_path_join(path_parts2)))
     if not path_parts1 and not path_parts2:
       raise vclib.Error("Nothing to diff.")
-
+    
     if path_parts1:
       temp1 = tempfile.mktemp()
-      open(temp1, 'wb').write(self.openfile(path_parts1, rev1)[0].getvalue())
+      open(temp1, 'wb').write(self.openfile(path_parts1, rev1, {})[0].getvalue())
       r1 = self.itemlog(path_parts1, rev1, vclib.SORTBY_DEFAULT, 0, 0, {})[-1]
       info1 = (self.rcsfile(path_parts1, root=1, v=0), r1.date, r1.string)
     else:
@@ -142,7 +139,7 @@ class CCVSRepository(BaseCVSRepository):
 
     if path_parts2:
       temp2 = tempfile.mktemp()
-      open(temp2, 'wb').write(self.openfile(path_parts2, rev2)[0].getvalue())
+      open(temp2, 'wb').write(self.openfile(path_parts2, rev2, {})[0].getvalue())
       r2 = self.itemlog(path_parts2, rev2, vclib.SORTBY_DEFAULT, 0, 0, {})[-1]
       info2 = (self.rcsfile(path_parts2, root=1, v=0), r2.date, r2.string)
     else:
@@ -154,25 +151,23 @@ class CCVSRepository(BaseCVSRepository):
     return vclib._diff_fp(temp1, temp2, info1, info2,
                           self.utilities.diff or 'diff', diff_args)
 
-  def annotate(self, path_parts, rev=None):
+  def annotate(self, path_parts, rev=None, include_text=False):
     if self.itemtype(path_parts, rev) != vclib.FILE:  # does auth-check
-      raise vclib.Error("Path '%s' is not a file."
-                        % (string.join(path_parts, "/")))
-    source = blame.BlameSource(self.rcsfile(path_parts, 1), rev, self.guesser)
+      raise vclib.Error("Path '%s' is not a file." % (_path_join(path_parts)))
+    source = blame.BlameSource(self.rcsfile(path_parts, 1), rev, self.guesser, include_text)
     return source, source.revision
 
   def revinfo(self, rev):
     raise vclib.UnsupportedFeature
 
-  def openfile(self, path_parts, rev=None):
+  def openfile(self, path_parts, rev, options):
     if self.itemtype(path_parts, rev) != vclib.FILE:  # does auth-check
-      raise vclib.Error("Path '%s' is not a file."
-                        % (string.join(path_parts, "/")))
+      raise vclib.Error("Path '%s' is not a file." % (_path_join(path_parts)))
     path = self.rcsfile(path_parts, 1)
     sink = COSink(rev)
     rcsparse.parse(open(path, 'rb'), sink)
     revision = sink.last and sink.last.string
-    return cStringIO.StringIO(string.join(sink.sstext.text, "\n")), revision
+    return cStringIO.StringIO('\n'.join(sink.sstext.text)), revision
 
 class MatchingSink(rcsparse.Sink):
   """Superclass for sinks that search for revisions based on tag or number"""
@@ -212,6 +207,7 @@ class InfoSink(MatchingSink):
     self.matching_rev = None
     self.perfect_match = 0
     self.lockinfo = { }
+    self.saw_revision = False
 
   def define_tag(self, name, revision):
     MatchingSink.define_tag(self, name, revision)
@@ -225,10 +221,17 @@ class InfoSink(MatchingSink):
         self.entry.absent = 1
       raise rcsparse.RCSStopParser
 
+  def parse_completed(self):
+    if not self.saw_revision:
+      #self.entry.errors.append("No revisions exist on %s" % (view_tag or "MAIN"))
+      self.entry.absent = 1
+    
   def set_locker(self, rev, locker):
     self.lockinfo[rev] = locker
     
   def define_revision(self, revision, date, author, state, branches, next):
+    self.saw_revision = True
+    
     if self.perfect_match:
       return
 
@@ -236,14 +239,18 @@ class InfoSink(MatchingSink):
     rev = Revision(revision, date, author, state == "dead")
     rev.lockinfo = self.lockinfo.get(revision)
     
-    # perfect match if revision number matches tag number or if revision is on
-    # trunk and tag points to trunk. imperfect match if tag refers to a branch
-    # and this revision is the highest revision so far found on that branch
+    # perfect match if revision number matches tag number or if
+    # revision is on trunk and tag points to trunk.  imperfect match
+    # if tag refers to a branch and either a) this revision is the
+    # highest revision so far found on that branch, or b) this
+    # revision is the branchpoint.
     perfect = ((rev.number == tag.number) or
                (not tag.number and len(rev.number) == 2))
-    if perfect or (tag.is_branch and tag.number == rev.number[:-1] and
-                   (not self.matching_rev or
-                    rev.number > self.matching_rev.number)):
+    if perfect or (tag.is_branch and \
+                   ((tag.number == rev.number[:-1] and
+                     (not self.matching_rev or
+                      rev.number > self.matching_rev.number)) or
+                    (rev.number == tag.number[:-1]))):
       self.matching_rev = rev
       self.perfect_match = perfect
 
@@ -299,18 +306,18 @@ class TreeSink(rcsparse.Sink):
     deled = 0
     if self.head != revision:
       changed = 1
-      lines = string.split(text, '\n')
+      lines = text.split('\n')
       idx = 0
       while idx < len(lines):
         command = lines[idx]
         dmatch = self.d_command.match(command)
         idx = idx + 1
         if dmatch:
-          deled = deled + string.atoi(dmatch.group(2))
+          deled = deled + int(dmatch.group(2))
         else:
           amatch = self.a_command.match(command)
           if amatch:
-            count = string.atoi(amatch.group(2))
+            count = int(amatch.group(2))
             added = added + count
             idx = idx + count
           elif command:
@@ -326,12 +333,12 @@ class StreamText:
   a_command = re.compile('^a(\d+)\\s(\\d+)')
 
   def __init__(self, text):
-    self.text = string.split(text, "\n")
+    self.text = text.split('\n')
 
   def command(self, cmd):
     adjust = 0
     add_lines_remaining = 0
-    diffs = string.split(cmd, "\n")
+    diffs = cmd.split('\n')
     if diffs[-1] == "":
       del diffs[-1]
     if len(diffs) == 0:
@@ -349,22 +356,22 @@ class StreamText:
       amatch = self.a_command.match(command)
       if dmatch:
         # "d" - Delete command
-        start_line = string.atoi(dmatch.group(1))
-        count      = string.atoi(dmatch.group(2))
+        start_line = int(dmatch.group(1))
+        count      = int(dmatch.group(2))
         begin = start_line + adjust - 1
         del self.text[begin:begin + count]
         adjust = adjust - count
       elif amatch:
         # "a" - Add command
-        start_line = string.atoi(amatch.group(1))
-        count      = string.atoi(amatch.group(2))
+        start_line = int(amatch.group(1))
+        count      = int(amatch.group(2))
         add_lines_remaining = count
       else:
         raise RuntimeError, 'Error parsing diff commands'
 
 def secondnextdot(s, start):
   # find the position the second dot after the start index.
-  return string.find(s, '.', string.find(s, '.', start) + 1)
+  return s.find('.', s.find('.', start) + 1)
 
 
 class COSink(MatchingSink):

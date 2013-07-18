@@ -1,5 +1,5 @@
 #
-# Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -11,7 +11,6 @@
 
 import os
 import sys
-import string
 import time
 import re
 import cgi
@@ -219,6 +218,9 @@ class CheckinDatabase:
 
         return list
 
+    def GetCommitsTable(self):
+        return self._version >= 1 and 'commits' or 'checkins'
+        
     def GetTableList(self):
         sql = "SHOW TABLES"
         cursor = self.db.cursor()
@@ -384,13 +386,11 @@ class CheckinDatabase:
             'descid'       : self.GetDescriptionID(commit.GetDescription()),
         }
 
-        commits_table = self._version >= 1 and 'commits' or 'checkins'
-
         cursor = self.db.cursor()
         try:
             # MySQL-specific INSERT-or-UPDATE with ID retrieval
             cursor.execute(
-                'INSERT INTO '+commits_table+'('+','.join(i for i in props)+') VALUES ('+
+                'INSERT INTO '+self.GetCommitsTable()+'('+','.join(i for i in props)+') VALUES ('+
                 ', '.join('%s' for i in props)+') ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), '+
                 ', '.join(i+'=VALUES('+i+')' for i in props),
                 tuple(props[i] for i in props)
@@ -447,8 +447,10 @@ class CheckinDatabase:
             elif query_entry.match == "glob":
                 # check if the match is exact
                 if not re.match(r'(\*|\?|\[.*\])', data):
+                    # most optimal is just '=' for exact matches
                     match = "="
                 else:
+                    # LIKE is more optimal than REGEXP
                     data = data.replace('%', '\\%')
                     data = data.replace('_', '\\_')
                     data = data.replace('*', '%')
@@ -465,7 +467,7 @@ class CheckinDatabase:
             if match != '':
                 sqlList.append("%s%s%s" % (field, match, self.db.literal(data)))
 
-        return "(%s)" % (string.join(sqlList, " OR "))
+        return "(%s)" % (" OR ".join(sqlList))
 
     def query_ids(self, in_field, table, id_field, name_field, lst):
         if not len(lst):
@@ -529,7 +531,7 @@ class CheckinDatabase:
         )
 
     def CreateSQLQueryString(self, query):
-        commits_table = self._version >= 1 and 'commits' or 'checkins'
+        commits_table = self.GetCommitsTable()
         fields = [
             commits_table+".*",
             "repositories.repository AS repository_name",
@@ -618,17 +620,18 @@ class CheckinDatabase:
                 if cond is not None: joinConds.append(cond)
 
         fields = string.join(fields, ",")
-        tables = string.join(tables, ",")
-        conditions = string.join(joinConds + condList, " AND ")
+        tables = ",".join(tables)
+        conditions = " AND ".join(joinConds + condList)
         conditions = conditions and "WHERE %s" % conditions
 
-        ## limit the number of rows requested or we could really slam
-        ## a server with a large database
+        ## apply the query's row limit, if any (so we avoid really
+        ## slamming a server with a large database)
         limit = ""
         if query.limit:
-            limit = "LIMIT %s" % (str(query.limit))
-        elif self._row_limit:
-            limit = "LIMIT %s" % (str(self._row_limit))
+            if detect_leftover:
+                limit = "LIMIT %s" % (str(query.limit + 1))
+            else:
+                limit = "LIMIT %s" % (str(query.limit))
 
         sql = "SELECT %s FROM %s %s %s %s" % (
             fields, tables, conditions, order_by, limit)
@@ -636,6 +639,7 @@ class CheckinDatabase:
         return sql
 
     # Check access to dir/file in repository repos
+    # FIXME Should probably be moved outside of CheckinDatabase, but here by now
     def check_commit_access(self, repos, dir, file, rev):
         r = self.request.get_repo(repos)
         if not r:
@@ -799,13 +803,12 @@ class CheckinDatabase:
         if file_id == None:
             return None
 
-        commits_table = self._version >= 1 and 'commits' or 'checkins'
         sql = "SELECT whoid FROM %s WHERE "\
               "  repositoryid=%%s "\
               "  AND dirid=%%s"\
               "  AND fileid=%%s"\
               "  AND revision=%%s"\
-              % (commits_table)
+              % (self.GetCommitsTable())
         sql_args = (repository_id, dir_id, file_id, commit.GetRevision())
 
         cursor = self.db.cursor()
@@ -821,10 +824,9 @@ class CheckinDatabase:
     def sql_delete(self, table, key, value, keep_fkey = None):
         sql = "DELETE FROM %s WHERE %s=%%s" % (table, key)
         sql_args = (value, )
-        commits_table = self._version >= 1 and 'commits' or 'checkins'
         if keep_fkey:
             sql += " AND %s NOT IN (SELECT %s FROM %s WHERE %s = %%s)" \
-                   % (key, keep_fkey, commits_table, keep_fkey)
+                   % (key, keep_fkey, self.GetCommitsTable(), keep_fkey)
             sql_args = (value, value)
         cursor = self.db.cursor()
         cursor.execute(sql, sql_args)
@@ -842,7 +844,7 @@ class CheckinDatabase:
             raise UnknownRepositoryError("Unknown repository '%s'"
                                          % (repository))
 
-        checkins_table = self._version >= 1 and 'commits' or 'checkins'
+        checkins_table = self.GetCommitsTable()
 
         # Purge checkins
         cursor = self.db.cursor()
@@ -1085,8 +1087,9 @@ class QueryEntry:
         self.data = data
         self.match = match
 
-## CheckinDatabaseQueryData is a object which contains the search parameters
-## for a query to the CheckinDatabase
+## CheckinDatabaseQuery is an object which contains the search
+## parameters for a query to the Checkin Database and -- after the
+## query is executed -- the data returned by the query.
 class CheckinDatabaseQuery:
     def __init__(self):
         ## sorting
@@ -1112,13 +1115,17 @@ class CheckinDatabaseQuery:
 
         ## limit on number of rows to return
         self.limit = None
-
+        self.limit_reached = 0
+        
         ## list of commits -- filled in by CVS query
         self.commit_list = []
 
         ## commit_cb provides a callback for commits as they
         ## are added
         self.commit_cb = None
+
+        ## has this query been run?
+        self.executed = 0
 
     def SetTextQuery(self, query):
         self.text_query = query
@@ -1180,6 +1187,20 @@ class CheckinDatabaseQuery:
     def AddCommit(self, commit):
         self.commit_list.append(commit)
 
+    def SetExecuted(self):
+        self.executed = 1
+
+    def SetLimitReached(self):
+        self.limit_reached = 1
+
+    def GetLimitReached(self):
+        assert self.executed
+        return self.limit_reached
+
+    def GetCommitList(self):
+        assert self.executed
+        return self.commit_list
+        
 
 ##
 ## entrypoints
@@ -1190,13 +1211,15 @@ def CreateCommit():
 def CreateCheckinQuery():
     return CheckinDatabaseQuery()
 
-def ConnectDatabase(cfg, request=None, readonly=0):
-    db = CheckinDatabase(
-        readonly = readonly,
-        request = request,
-        cfg = cfg.cvsdb,
-        guesser = cfg.guesser(),
-    )
+def ConnectDatabase(cfg, readonly=0):
+    if readonly:
+        user = cfg.cvsdb.readonly_user
+        passwd = cfg.cvsdb.readonly_passwd
+    else:
+        user = cfg.cvsdb.user
+        passwd = cfg.cvsdb.passwd
+    db = CheckinDatabase(cfg.cvsdb.host, cfg.cvsdb.port, user, passwd,
+                         cfg.cvsdb.database_name)
     db.Connect()
     return db
 
@@ -1207,7 +1230,7 @@ def ConnectDatabaseReadOnly(cfg, request):
 def GetCommitListFromRCSFile(repository, path_parts, revision=None):
     commit_list = []
 
-    directory = string.join(path_parts[:-1], "/")
+    directory = "/".join(path_parts[:-1])
     file = path_parts[-1]
 
     revs = repository.itemlog(path_parts, revision, vclib.SORTBY_DEFAULT,
@@ -1224,7 +1247,7 @@ def GetCommitListFromRCSFile(repository, path_parts, revision=None):
 
         if rev.changed:
             # extract the plus/minus and drop the sign
-            plus, minus = string.split(rev.changed)
+            plus, minus = rev.changed.split()
             commit.SetPlusCount(plus[1:])
             commit.SetMinusCount(minus[1:])
 

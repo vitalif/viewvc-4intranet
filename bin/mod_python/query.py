@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*-python-*-
 #
-# Copyright (C) 1999-2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -66,7 +66,10 @@ cfg = viewvc.load_config(CONF_PATHNAME)
 def index(req):
   server = sapi.ModPythonServer(req)
   try:
-    query.main(server, cfg, "viewvc.py")
+    viewvc_base_url = cfg.query.viewvc_base_url
+    if viewvc_base_url is None:
+      viewvc_base_url = "viewvc.py"
+    query.main(server, cfg, viewvc_base_url)
   finally:
     server.close()
 

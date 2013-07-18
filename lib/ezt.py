@@ -347,7 +347,7 @@ class Template:
       for_names = [ ]
 
     if base_format:
-      program.append((self._cmd_format, _printers[base_format]))
+      program.append((self._cmd_format, _formatters[base_format]))
 
     for i in range(len(parts)):
       piece = parts[i]
@@ -405,13 +405,13 @@ class Template:
           elif cmd == 'format':
             if args[1][0]:
               # argument is a variable reference
-              printer = args[1]
+              formatter = args[1]
             else:
-              # argument is a string constant referring to built-in printer
-              printer = _printers.get(args[1][1])
-              if not printer:
+              # argument is a string constant referring to built-in formatter
+              formatter = _formatters.get(args[1][1])
+              if not formatter:
                 raise UnknownFormatConstantError(str(args[1:]))
-            program.append((self._cmd_format, printer))
+            program.append((self._cmd_format, formatter))
 
           # remember the cmd, current pos, args, and a section placeholder
           stack.append([cmd, len(program), args[1:], None])
@@ -465,13 +465,13 @@ class Template:
     except TypeError:
       raise Exception("Unprintable value type for '%s'" % (str(valrefs[0][0])))
 
-  def _cmd_format(self, printer, ctx):
-    if type(printer) is TupleType:
-      printer = _get_value(printer, ctx)
-    ctx.printers.append(printer)
+  def _cmd_format(self, formatter, ctx):
+    if type(formatter) is TupleType:
+      formatter = _get_value(formatter, ctx)
+    ctx.formatters.append(formatter)
 
   def _cmd_end_format(self, valref, ctx):
-    ctx.printers.pop()
+    ctx.formatters.pop()
 
   def _cmd_include(self, (valref, reader), ctx):
     fname = _get_value(valref, ctx)
@@ -637,14 +637,23 @@ def _get_value((refname, start, rest), ctx):
   # string or a sequence
   return ob
 
+def _print_formatted(formatters, ctx, chunk):
+  # print chunk to ctx.fp after running it sequentially through formatters
+  for formatter in formatters:
+    chunk = formatter(chunk)
+  ctx.fp.write(chunk)
+  
 def _write_value(value, args, ctx):
   # value is a callback function, generates its own output
   if callable(value):
     apply(value, [ctx] + list(args))
     return
 
-  # pop printer in case it recursively calls _write_value
-  printer = ctx.printers.pop()
+  # squirrel away formatters in case one of them recursively calls
+  # _write_value() -- we'll use them (in reverse order) to format our
+  # output.
+  formatters = ctx.formatters[:]
+  formatters.reverse()
 
   try:
     # if the value has a 'read' attribute, then it is a stream: copy it
@@ -653,7 +662,7 @@ def _write_value(value, args, ctx):
         chunk = value.read(16384)
         if not chunk:
           break
-        printer(ctx, chunk)
+        _print_formatted(formatters, ctx, chunk)
 
     # value is a substitution pattern
     elif args:
@@ -666,57 +675,23 @@ def _write_value(value, args, ctx):
             piece = args[idx]
           else:
             piece = '<undef>'
-        printer(ctx, piece)
+        _print_formatted(formatters, ctx, piece)
 
     # plain old value, write to output
     else:
-      printer(ctx, value)
+      _print_formatted(formatters, ctx, value)
 
   finally:
-    ctx.printers.append(printer)
-
-
-class TemplateData:
-  """A custom dictionary-like object that allows one-time definition
-  of keys, and only value fetches and changes, and key deletions,
-  thereafter.
-
-  EZT doesn't require the use of this special class -- a normal
-  dict-type data dictionary works fine.  But use of this class will
-  assist those who want the data sent to their templates to have a
-  consistent set of keys."""
-
-  def __init__(self, initial_data={}):
-    initial_data['env_user_url'] = os.environ.get('user_url', '')
-    self._items = initial_data
-    
-  def __getitem__(self, key):
-    return self._items.__getitem__(key)
-
-  def __setitem__(self, key, item):
-    assert self._items.has_key(key)
-    return self._items.__setitem__(key, item)
-
-  def __delitem__(self, key):
-    return self._items.__delitem__(key)
-
-  def keys(self):
-    return self._items.keys()
-
-  def merge(self, template_data):
-    """Merge the data in TemplataData instance TEMPLATA_DATA into this
-    instance.  Avoid the temptation to use this conditionally in your
-    code -- it rather defeats the purpose of this class."""
-    
-    assert isinstance(template_data, TemplateData)
-    self._items.update(template_data._items)
+    # restore our formatters
+    formatters.reverse()
+    ctx.formatters = formatters
 
 
 class Context:
   """A container for the execution context"""
   def __init__(self, fp):
     self.fp = fp
-    self.printers = []
+    self.formatters = []
   def write(self, value, args=()):
     _write_value(value, args, self)
 
@@ -829,26 +804,34 @@ class BaseUnavailableError(EZTException):
 class UnknownFormatConstantError(EZTException):
   """The format specifier is an unknown value."""
 
-def _raw_printer(ctx, s):
+def _raw_formatter(s):
   try: s = s.encode('utf-8')
   except: pass
-  ctx.fp.write(s)
+  return s
 
-def _html_printer(ctx, s):
+def _html_formatter(s):
   try: s = s.encode('utf-8')
   except: pass
-  ctx.fp.write(cgi.escape(s))
+  return cgi.escape(s)
 
-def _uri_printer(ctx, s):
+def _xml_formatter(s):
   try: s = s.encode('utf-8')
   except: pass
-  ctx.fp.write(urllib.quote(s))
+  s = s.replace('&', '&#x26;')
+  s = s.replace('<', '&#x3C;')
+  s = s.replace('>', '&#x3E;')
+  return s
 
-_printers = {
-  FORMAT_RAW  : _raw_printer,
-  FORMAT_HTML : _html_printer,
-  FORMAT_XML  : _html_printer,
-  FORMAT_URI  : _uri_printer,
+def _uri_formatter(s):
+  try: s = s.encode('utf-8')
+  except: pass
+  return urllib.quote(s)
+
+_formatters = {
+  FORMAT_RAW  : _raw_formatter,
+  FORMAT_HTML : _html_formatter,
+  FORMAT_XML  : _xml_formatter,
+  FORMAT_URI  : _uri_formatter,
 }
 
 # --- standard test environment ---

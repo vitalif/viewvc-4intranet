@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*-python-*-
 #
-# Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -23,6 +23,7 @@ import sys
 import string
 import time
 
+from common import _item, TemplateData
 import cvsdb
 import viewvc
 import ezt
@@ -57,7 +58,7 @@ class FormData:
             self.valid = 1
         
         try:
-            self.repository = string.strip(form["repository"].value)
+            self.repository = form["repository"].value.strip()
         except KeyError:
             pass
         except TypeError:
@@ -66,7 +67,7 @@ class FormData:
             self.valid = 1
         
         try:
-            self.branch = string.strip(form["branch"].value)
+            self.branch = form["branch"].value.strip()
         except KeyError:
             pass
         except TypeError:
@@ -75,7 +76,7 @@ class FormData:
             self.valid = 1
             
         try:
-            self.directory = string.strip(form["directory"].value)
+            self.directory = form["directory"].value.strip()
         except KeyError:
             pass
         except TypeError:
@@ -84,7 +85,7 @@ class FormData:
             self.valid = 1
             
         try:
-            self.file = string.strip(form["file"].value)
+            self.file = form["file"].value.strip()
         except KeyError:
             pass
         except TypeError:
@@ -93,7 +94,7 @@ class FormData:
             self.valid = 1
             
         try:
-            self.who = string.strip(form["who"].value)
+            self.who = form["who"].value.strip()
         except KeyError:
             pass
         except TypeError:
@@ -102,14 +103,14 @@ class FormData:
             self.valid = 1
             
         try:
-            self.sortby = string.strip(form["sortby"].value)
+            self.sortby = form["sortby"].value.strip()
         except KeyError:
             pass
         except TypeError:
             pass
         
         try:
-            self.date = string.strip(form["date"].value)
+            self.date = form["date"].value.strip()
         except KeyError:
             pass
         except TypeError:
@@ -168,7 +169,7 @@ def listparse_string(str):
             ## command; add the command and start over
             elif c == ",":
                 ## strip ending whitespace on un-quoted data
-                temp = string.rstrip(temp)
+                temp = temp.rstrip()
                 return_list.append( ("", temp) )
                 temp = ""
                 state = "eat leading whitespace"
@@ -227,8 +228,9 @@ def decode_command(cmd):
     else:
         return "exact"
 
-def form_to_cvsdb_query(form_data):
+def form_to_cvsdb_query(cfg, form_data):
     query = cvsdb.CreateCheckinQuery()
+    query.SetLimit(cfg.cvsdb.row_limit)
 
     if form_data.repository:
         for cmd, str in listparse_string(form_data.repository):
@@ -281,18 +283,40 @@ def form_to_cvsdb_query(form_data):
 
 def prev_rev(rev):
     '''Returns a string representing the previous revision of the argument.'''
-    r = string.split(rev, '.')
+    r = rev.split('.')
     # decrement final revision component
     r[-1] = str(int(r[-1]) - 1)
     # prune if we pass the beginning of the branch
     if len(r) > 2 and r[-1] == '0':
         r = r[:-2]
-    return string.join(r, '.')
+    return '.'.join(r)
 
 def is_forbidden(cfg, cvsroot_name, module):
-    auth_params = cfg.get_authorizer_params('forbidden', cvsroot_name)
-    forbidden = auth_params.get('forbidden', '')
-    forbidden = map(string.strip, filter(None, string.split(forbidden, ',')))
+    '''Return 1 if MODULE in CVSROOT_NAME is forbidden; return 0 otherwise.'''
+
+    # CVSROOT_NAME might be None here if the data comes from an
+    # unconfigured root.  This interfaces doesn't care that the root
+    # isn't configured, but if that's the case, it will consult only
+    # the base and per-vhost configuration for authorizer and
+    # authorizer parameters.
+    if cvsroot_name:
+        authorizer, params = cfg.get_authorizer_and_params_hack(cvsroot_name)
+    else:
+        authorizer = cfg.options.authorizer
+        params = cfg.get_authorizer_params()
+        
+    # If CVSROOT_NAME isn't configured to use an authorizer, nothing
+    # is forbidden.  If it's configured to use something other than
+    # the 'forbidden' authorizer, complain.  Otherwise, check for
+    # forbiddenness per the PARAMS as expected.
+    if not authorizer:
+        return 0
+    if authorizer != 'forbidden':    
+        raise Exception("The 'forbidden' authorizer is the only one supported "
+                        "by this interface.  The '%s' root is configured to "
+                        "use a different one." % (cvsroot_name))
+    forbidden = params.get('forbidden', '')
+    forbidden = map(lambda x: x.strip(), filter(None, forbidden.split(',')))
     default = 0
     for pat in forbidden:
         if pat[0] == '!':
@@ -304,12 +328,8 @@ def is_forbidden(cfg, cvsroot_name, module):
     return default
     
 def build_commit(server, cfg, desc, files, cvsroots, viewvc_link):
-    ob = _item(num_files=len(files), files=[], plus=0, minus=0)
-    
-    if desc:
-        ob.log = string.replace(server.escape(desc), '\n', '<br />')
-    else:
-        ob.log = '&nbsp;'
+    ob = _item(num_files=len(files), files=[])
+    ob.log = desc and server.escape(desc).replace('\n', '<br />') or '&nbsp;'
 
     for commit in files:
         repository = commit.GetRepository()
@@ -318,7 +338,7 @@ def build_commit(server, cfg, desc, files, cvsroots, viewvc_link):
 
         ## find the module name (if any)
         try:
-            module = filter(None, string.split(directory, '/'))[0]
+            module = filter(None, directory.split('/'))[0]
         except IndexError:
             module = None
 
@@ -343,9 +363,10 @@ def build_commit(server, cfg, desc, files, cvsroots, viewvc_link):
         except:
             raise Exception, str([directory, commit.GetFile()])
 
-        ## if we couldn't find the cvsroot path configured in the 
-        ## viewvc.conf file, then don't make the link
-        if cvsroot_name:
+        ## If we couldn't find the cvsroot path configured in the
+        ## viewvc.conf file, or we don't have a VIEWVC_LINK, then
+        ## don't make the link.
+        if cvsroot_name and viewvc_link:
             flink = '[%s] <a href="%s/%s?root=%s">%s</a>' % (
                     cvsroot_name, viewvc_link, urllib.quote(file),
                     cvsroot_name, file)
@@ -376,22 +397,26 @@ def build_commit(server, cfg, desc, files, cvsroots, viewvc_link):
     return ob
 
 def run_query(server, cfg, db, form_data, viewvc_link):
-    query = form_to_cvsdb_query(form_data)
+    query = form_to_cvsdb_query(cfg, form_data)
     db.RunQuery(query)
 
-    if not query.commit_list:
-        return [ ]
+    commit_list = query.GetCommitList()
+    if not commit_list:
+        return [ ], 0
+
+    row_limit_reached = query.GetLimitReached()
 
     commits = [ ]
     files = [ ]
 
     cvsroots = {}
+    viewvc.expand_root_parents(cfg)
     rootitems = cfg.general.svn_roots.items() + cfg.general.cvs_roots.items()
     for key, value in rootitems:
         cvsroots[cvsdb.CleanRepository(value)] = key
 
-    current_desc = query.commit_list[0].GetDescription()
-    for commit in query.commit_list:
+    current_desc = commit_list[0].GetDescription()
+    for commit in commit_list:
         desc = commit.GetDescription()
         if current_desc == desc:
             files.append(commit)
@@ -414,7 +439,7 @@ def run_query(server, cfg, db, form_data, viewvc_link):
         return len(commit.files) > 0
     commits = filter(_only_with_files, commits)
   
-    return commits
+    return commits, row_limit_reached
 
 def main(server, cfg, viewvc_link):
   try:
@@ -424,31 +449,32 @@ def main(server, cfg, viewvc_link):
 
     db = cvsdb.ConnectDatabaseReadOnly(cfg, None)
     if form_data.valid:
-        commits = run_query(server, cfg, db, form_data, viewvc_link)
+        commits, row_limit_reached = run_query(server, cfg, db, form_data, viewvc_link)
         query = None
     else:
         commits = [ ]
+        row_limit_reached = 0
         query = 'skipped'
 
-    data = ezt.TemplateData({
+    docroot = cfg.options.docroot
+    if docroot is None and viewvc_link:
+        docroot = viewvc_link + '/' + viewvc.docroot_magic_path
+        
+    data = TemplateData({
       'cfg' : cfg,
       'address' : cfg.general.address,
       'vsn' : viewvc.__version__,
-
-      'textquery' : server.escape(form_data.textquery, 1),
-      'repository' : server.escape(form_data.repository, 1),
-      'branch' : server.escape(form_data.branch, 1),
-      'directory' : server.escape(form_data.directory, 1),
-      'file' : server.escape(form_data.file, 1),
-      'who' : server.escape(form_data.who, 1),
-      'docroot' : cfg.options.docroot is None \
-                  and viewvc_link + '/' + viewvc.docroot_magic_path \
-                  or cfg.options.docroot,
-
+      'textquery' : server.escape(form_data.textquery),
+      'repository' : server.escape(form_data.repository),
+      'branch' : server.escape(form_data.branch),
+      'directory' : server.escape(form_data.directory),
+      'file' : server.escape(form_data.file),
+      'who' : server.escape(form_data.who),
+      'docroot' : docroot,
       'sortby' : form_data.sortby,
       'date' : form_data.date,
-
       'query' : query,
+      'row_limit_reached' : ezt.boolean(row_limit_reached),
       'commits' : commits,
       'num_commits' : len(commits),
       'rss_href' : None,
@@ -467,7 +493,3 @@ def main(server, cfg, viewvc_link):
     exc_info = debug.GetExceptionData()
     server.header(status=exc_info['status'])
     debug.PrintException(server, exc_info) 
-
-class _item:
-  def __init__(self, **kw):
-    vars(self).update(kw)

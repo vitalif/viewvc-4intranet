@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 2006-2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 2006-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -12,7 +12,6 @@
 # (c) 2006 Sergey Lapin <slapin@dataart.com>
 
 import vcauth
-import string
 import os.path
 import debug
 
@@ -34,9 +33,9 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
     # See if the admin wants us to do case normalization of usernames.
     self.force_username_case = params.get('force_username_case')
     if self.force_username_case == "upper":
-      self.username = username.upper()
+      self.username = username and username.upper() or username
     elif self.force_username_case == "lower":
-      self.username = username.lower()
+      self.username = username and username.lower() or username
     elif not self.force_username_case:
       self.username = username
     else:
@@ -54,7 +53,10 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
     # option names.
     cp = ConfigParser()
     cp.optionxform = lambda x: x
-    cp.read(self.authz_file)
+    try:
+      cp.read(self.authz_file)
+    except:
+      raise debug.ViewVCException("Unable to parse configured authzfile file")
 
     # Figure out if there are any aliases for the current username
     aliases = []
@@ -94,9 +96,9 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
         all_groups.append(groupname)
         group_member = 0
         groupname = groupname.strip()
-        entries = string.split(cp.get('groups', groupname), ',')
+        entries = cp.get('groups', groupname).split(',')
         for entry in entries:
-          entry = string.strip(entry)
+          entry = entry.strip()
           if entry == self.username:
             group_member = 1
             break
@@ -137,13 +139,13 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
       # Figure if this path is explicitly allowed or denied to USERNAME.
       allow = deny = 0
       for user in cp.options(section):
-        user = string.strip(user)
+        user = user.strip()
         if _userspec_matches_user(user):
           # See if the 'r' permission is among the ones granted to
           # USER.  If so, we can stop looking.  (Entry order is not
           # relevant -- we'll use the most permissive entry, meaning
           # one 'allow' is all we need.)
-          allow = string.find(cp.get(section, user), 'r') != -1
+          allow = cp.get(section, user).find('r') != -1
           deny = not allow
           if allow:
             break
@@ -172,7 +174,7 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
       if section.find(':') == -1:
         path = section
       else:
-        name, path = string.split(section, ':', 1)
+        name, path = section.split(':', 1)
         if name == rootname:
           root_sections.append(section)
         continue
@@ -184,14 +186,14 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
       # USERNAME, record it.
       if allow or deny:
         if path != '/':
-          path = '/' + string.join(filter(None, string.split(path, '/')), '/')
+          path = '/' + '/'.join(filter(None, path.split('/')))
         paths_for_root[path] = allow
 
     # Okay.  Superimpose those root-specific values now.
     for section in root_sections:
 
       # Get the path again.
-      name, path = string.split(section, ':', 1)
+      name, path = section.split(':', 1)
       
       # Check for a specific access determination.
       allow, deny = _process_access_section(section)
@@ -200,7 +202,7 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
       # USERNAME, record it.
       if allow or deny:
         if path != '/':
-          path = '/' + string.join(filter(None, string.split(path, '/')), '/')
+          path = '/' + '/'.join(filter(None, path.split('/')))
         paths_for_root[path] = allow
 
     # If the root isn't readable, there's no point in caring about all
@@ -221,6 +223,36 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
     paths = self._get_paths_for_root(rootname)
     return (paths is not None) and 1 or 0
   
+  def check_universal_access(self, rootname):
+    paths = self._get_paths_for_root(rootname)
+    if not paths: # None or empty.
+      return 0
+
+    # Search the access determinations.  If there's a mix, we can't
+    # claim a universal access determination.
+    found_allow = 0
+    found_deny = 0
+    for access in paths.values():
+      if access:
+        found_allow = 1
+      else:
+        found_deny = 1
+      if found_allow and found_deny:
+        return None
+
+    # We didn't find both allowances and denials, so we must have
+    # found one or the other.  Denials only is a universal denial.
+    if found_deny:
+      return 0
+
+    # ... but allowances only is only a universal allowance if read
+    # access is granted to the root directory.
+    if found_allow and paths.has_key('/'):
+      return 1
+
+    # Anything else is indeterminable.
+    return None
+    
   def check_path_access(self, rootname, path_parts, pathtype, rev=None):
     # Crawl upward from the path represented by PATH_PARTS toward to
     # the root of the repository, looking for an explicitly grant or
@@ -230,7 +262,7 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
       return 0
     parts = path_parts[:]
     while parts:
-      path = '/' + string.join(parts, '/')
+      path = '/' + '/'.join(parts)
       if paths.has_key(path):
         return paths[path]
       del parts[-1]

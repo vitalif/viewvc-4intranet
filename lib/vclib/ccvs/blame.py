@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*-python-*-
 #
-# Copyright (C) 1999-2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 # Copyright (C) 2000 Curt Hagenlocher <curt@hagenlocher.org>
 #
 # By using this file, you agree to the terms and conditions set forth in
@@ -26,7 +26,6 @@
 #
 # -----------------------------------------------------------------------
 
-import string
 import re
 import time
 import math
@@ -101,7 +100,7 @@ class CVSParser(rcsparse.Sink):
 
   # Split deltatext specified by rev to each line.
   def deltatext_split(self, rev):
-    lines = string.split(self.revision_deltatext[rev], '\n')
+    lines = self.revision_deltatext[rev].split('\n')
     if lines[-1] == '':
       del lines[-1]
     return lines
@@ -140,16 +139,16 @@ class CVSParser(rcsparse.Sink):
           adjust = adjust + 1
         elif dmatch:
           # "d" - Delete command
-          start_line = string.atoi(dmatch.group(1))
-          count      = string.atoi(dmatch.group(2))
+          start_line = int(dmatch.group(1))
+          count      = int(dmatch.group(2))
           begin = start_line + adjust - 1
           del text[begin:begin + count]
           adjust = adjust - count
           lines_removed_now = lines_removed_now + count
         elif amatch:
           # "a" - Add command
-          start_line = string.atoi(amatch.group(1))
-          count      = string.atoi(amatch.group(2))
+          start_line = int(amatch.group(1))
+          count      = int(amatch.group(2))
           add_lines_remaining = count
           lines_added_now = lines_added_now + count
         else:
@@ -312,13 +311,13 @@ class CVSParser(rcsparse.Sink):
           skip = skip - 1
         elif dmatch:
           # "d" - Delete command
-          start_line = string.atoi(dmatch.group(1))
-          count      = string.atoi(dmatch.group(2))
+          start_line = int(dmatch.group(1))
+          count      = int(dmatch.group(2))
           line_count = line_count - count
         elif amatch:
           # "a" - Add command
-          start_line = string.atoi(amatch.group(1))
-          count      = string.atoi(amatch.group(2))
+          start_line = int(amatch.group(1))
+          count      = int(amatch.group(2))
           skip       = count
           line_count = line_count + count
         else:
@@ -360,8 +359,8 @@ class CVSParser(rcsparse.Sink):
             dmatch = self.d_command.match(command)
             amatch = self.a_command.match(command)
             if dmatch:
-              start_line = string.atoi(dmatch.group(1))
-              count      = string.atoi(dmatch.group(2))
+              start_line = int(dmatch.group(1))
+              count      = int(dmatch.group(2))
               temp = []
               while count > 0:
                 temp.append(revision)
@@ -369,8 +368,8 @@ class CVSParser(rcsparse.Sink):
               self.revision_map = (self.revision_map[:start_line - 1] +
                       temp + self.revision_map[start_line - 1:])
             elif amatch:
-              start_line = string.atoi(amatch.group(1))
-              count      = string.atoi(amatch.group(2))
+              start_line = int(amatch.group(1))
+              count      = int(amatch.group(2))
               del self.revision_map[start_line:start_line + count]
               skip = count
             else:
@@ -389,15 +388,15 @@ class CVSParser(rcsparse.Sink):
             dmatch = self.d_command.match(command)
             amatch = self.a_command.match(command)
             if dmatch:
-              start_line = string.atoi(dmatch.group(1))
-              count      = string.atoi(dmatch.group(2))
+              start_line = int(dmatch.group(1))
+              count      = int(dmatch.group(2))
               adj_begin  = start_line + adjust - 1
               adj_end    = start_line + adjust - 1 + count
               del self.revision_map[adj_begin:adj_end]
               adjust = adjust - count
             elif amatch:
-              start_line = string.atoi(amatch.group(1))
-              count      = string.atoi(amatch.group(2))
+              start_line = int(amatch.group(1))
+              count      = int(amatch.group(2))
               skip = count
               temp = []
               while count > 0:
@@ -415,7 +414,7 @@ class CVSParser(rcsparse.Sink):
 
 
 class BlameSource:
-  def __init__(self, rcs_file, opt_rev=None, charset_guesser=None):
+  def __init__(self, rcs_file, opt_rev=None, charset_guesser=None, include_text=False):
     # Parse the CVS file
     parser = CVSParser()
     revision = parser.parse_cvs_file(rcs_file, opt_rev)
@@ -430,6 +429,7 @@ class BlameSource:
     self.num_lines = count
     self.parser = parser
     self.guesser = charset_guesser
+    self.include_text = include_text
 
     # keep track of where we are during an iteration
     self.idx = -1
@@ -449,7 +449,9 @@ class BlameSource:
     line_number = idx + 1
     author = self.parser.revision_author[rev]
 
-    if self.guesser:
+    if not self.include_text:
+      thisline = None
+    elif self.guesser:
       thisline = self.guesser.utf8(self.lines[idx])
     else:
       thisline = self.lines[idx]

@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 1999-2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -15,17 +15,50 @@
 import os
 import os.path
 import re
+import urllib
 
 _re_url = re.compile('^(http|https|file|svn|svn\+[^:]+)://')
 
-def canonicalize_rootpath(rootpath):
+def _canonicalize_path(path):
+  import svn.core
   try:
-    import svn.core
-    return svn.core.svn_path_canonicalize(rootpath)
-  except:
-    if re.search(_re_url, rootpath):
-      return rootpath[-1] == '/' and rootpath[:-1] or rootpath
-    return os.path.normpath(rootpath)
+    return svn.core.svn_path_canonicalize(path)
+  except AttributeError: # svn_path_canonicalize() appeared in 1.4.0 bindings
+    # There's so much more that we *could* do here, but if we're
+    # here at all its because there's a really old Subversion in
+    # place, and those older Subversion versions cared quite a bit
+    # less about the specifics of path canonicalization.
+    if re.search(_re_url, path):
+      return path.rstrip('/')
+    else:
+      return os.path.normpath(path)
+
+
+def canonicalize_rootpath(rootpath):
+  # Try to canonicalize the rootpath using Subversion semantics.
+  rootpath = _canonicalize_path(rootpath)
+  
+  # ViewVC's support for local repositories is more complete and more
+  # performant than its support for remote ones, so if we're on a
+  # Unix-y system and we have a file:/// URL, convert it to a local
+  # path instead.
+  if os.name == 'posix':
+    rootpath_lower = rootpath.lower()
+    if rootpath_lower in ['file://localhost',
+                          'file://localhost/',
+                          'file://',
+                          'file:///'
+                          ]:
+      return '/'
+    if rootpath_lower.startswith('file://localhost/'):
+      rootpath = os.path.normpath(urllib.unquote(rootpath[16:]))
+    elif rootpath_lower.startswith('file:///'):
+      rootpath = os.path.normpath(urllib.unquote(rootpath[7:]))
+
+  # Ensure that we have an absolute path (or URL), and return.
+  if not re.search(_re_url, rootpath):
+    assert os.path.isabs(rootpath)
+  return rootpath
 
 
 def expand_root_parent(parent_path):
@@ -35,12 +68,27 @@ def expand_root_parent(parent_path):
   else:
     # Any subdirectories of PARENT_PATH which themselves have a child
     # "format" are returned as roots.
+    assert os.path.isabs(parent_path)
     subpaths = os.listdir(parent_path)
     for rootname in subpaths:
       rootpath = os.path.join(parent_path, rootname)
       if os.path.exists(os.path.join(rootpath, "format")):
         roots[rootname] = canonicalize_rootpath(rootpath)
   return roots
+
+
+def find_root_in_parent(parent_path, rootname):
+  """Search PARENT_PATH for a root named ROOTNAME, returning the
+  canonicalized ROOTPATH of the root if found; return None if no such
+  root is found."""
+  
+  if not re.search(_re_url, parent_path):
+    assert os.path.isabs(parent_path)
+    rootpath = os.path.join(parent_path, rootname)
+    format_path = os.path.join(rootpath, "format")
+    if os.path.exists(format_path):
+      return canonicalize_rootpath(rootpath)
+  return None
 
 
 def SubversionRepository(name, rootpath, authorizer, utilities, config_dir):

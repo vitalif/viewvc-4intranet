@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 1999-2008 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -14,7 +14,6 @@
 such as CVS.
 """
 
-import string
 import types
 
 
@@ -76,7 +75,7 @@ class Repository:
     """
     pass
 
-  def openfile(self, path_parts, rev):
+  def openfile(self, path_parts, rev, options):
     """Open a file object to read file contents at a given path and revision.
 
     The return value is a 2-tuple of containg the file object and revision
@@ -86,6 +85,8 @@ class Repository:
     of the repository. e.g. ["subdir1", "subdir2", "filename"]
 
     rev is the revision of the file to check out
+
+    options is a dictionary of implementation specific options
     """
 
   def listdir(self, path_parts, rev, options):
@@ -168,20 +169,29 @@ class Repository:
     Return value is a python file object
     """
 
-  def annotate(self, path_parts, rev):
-    """Return a list of annotate file content lines and a revision.
+  def annotate(self, path_parts, rev, include_text=False):
+    """Return a list of Annotation object, sorted by their
+    "line_number" components, which describe the lines of given
+    version of a file.
 
-    The result is a list of Annotation objects, sorted by their
-    line_number components.
-    """
+    The file path is specified as a list of components, relative to
+    the root of the repository. e.g. ["subdir1", "subdir2", "filename"]
+
+    rev is the revision of the item to return information about.
+    
+    If include_text is true, populate the Annotation objects' "text"
+    members with the corresponding line of file content; otherwise,
+    leave that member set to None."""
 
   def revinfo(self, rev):
     """Return information about a global revision
 
     rev is the revision of the item to return information about
     
-    Return value is a 4-tuple containing the date, author, log
-    message, and a list of ChangedPath items representing paths changed
+    Return value is a 5-tuple containing: the date, author, log
+    message, a list of ChangedPath items representing paths changed,
+    and a dictionary mapping property names to property values for
+    properties stored on an item.
 
     Raise vclib.UnsupportedFeature if the version control system
     doesn't support a global revision concept.
@@ -196,7 +206,21 @@ class Repository:
 
     rev is the revision of the item to return information about
     """
+
+  def filesize(self, path_parts, rev):
+    """Return the size of a versioned file's contents if it can be
+    obtained without a brute force measurement; -1 otherwise.
+
+    NOTE: Callers that require a filesize answer when this function
+    returns -1 may obtain it by measuring the data returned via
+    openfile().
     
+    The path is specified as a list of components, relative to the root
+    of the repository. e.g. ["subdir1", "subdir2", "filename"]
+
+    rev is the revision of the item to return information about
+    """
+
     
 # ======================================================================
 class DirEntry:
@@ -302,7 +326,7 @@ class ItemNotFound(Error):
     # use '/' rather than os.sep because this is for user consumption, and
     # it was defined using URL separators
     if type(path) in (types.TupleType, types.ListType):
-      path = string.join(path, '/')
+      path = '/'.join(path)
     Error.__init__(self, path)
 
 class InvalidRevision(Error):

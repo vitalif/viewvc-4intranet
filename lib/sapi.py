@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 1999-2006 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -16,17 +16,30 @@
 # -----------------------------------------------------------------------
 
 import types
-import string
 import os
 import sys
 import re
+import cgi
 
 
-# global server object. It will be either a CgiServer or a proxy to
-# an AspServer or ModPythonServer object.
+# global server object. It will be either a CgiServer, a WsgiServer,
+# or a proxy to an AspServer or ModPythonServer object.
 server = None
 
 
+# Simple HTML string escaping.  Note that we always escape the
+# double-quote character -- ViewVC shouldn't ever need to preserve
+# that character as-is, and sometimes needs to embed escaped values
+# into HTML attributes.
+def escape(s):
+  s = str(s)
+  s = s.replace('&', '&amp;')
+  s = s.replace('>', '&gt;')
+  s = s.replace('<', '&lt;')
+  s = s.replace('"', "&quot;")
+  return s
+
+  
 class Server:
   def __init__(self):
     self.pageGlobals = {}
@@ -34,6 +47,9 @@ class Server:
   def self(self):
     return self
 
+  def escape(self, s):
+    return escape(s)
+    
   def close(self):
     pass
 
@@ -129,9 +145,6 @@ class CgiServer(Server):
     global server
     server = self
 
-    global cgi
-    import cgi
-
   def addheader(self, name, value):
     self.headers.append((name, value))
 
@@ -160,9 +173,6 @@ class CgiServer(Server):
     self.header(status='301 Moved')
     sys.stdout.write('This document is located <a href="%s">here</a>.\n' % url)
 
-  def escape(self, s, quote = None):
-    return cgi.escape(s, quote)
-
   def getenv(self, name, value=None):
     ret = os.environ.get(name, value)
     if self.iis and name == 'PATH_INFO' and ret:
@@ -175,7 +185,7 @@ class CgiServer(Server):
   def FieldStorage(fp=None, headers=None, outerboundary="",
                  environ=os.environ, keep_blank_values=0, strict_parsing=0):
     return cgi.FieldStorage(fp, headers, outerboundary, environ,
-      keep_blank_values, strict_parsing)
+                            keep_blank_values, strict_parsing)
 
   def write(self, s):
     sys.stdout.write(s)
@@ -185,6 +195,60 @@ class CgiServer(Server):
 
   def file(self):
     return sys.stdout
+
+
+class WsgiServer(Server):
+  def __init__(self, environ, start_response):
+    Server.__init__(self)
+
+    self._environ = environ
+    self._start_response = start_response;
+    self._headers = []
+    self._wsgi_write = None
+    self.headerSent = False
+
+    global server
+    server = self
+
+  def addheader(self, name, value):
+    self._headers.append((name, value))
+
+  def header(self, content_type='text/html; charset=UTF-8', status=None):
+    if not status:
+      status = "200 OK"
+    if not self.headerSent:
+      self.headerSent = True
+      self._headers.insert(0, ("Content-Type", content_type),)
+      self._wsgi_write = self._start_response("%s" % status, self._headers)
+
+  def redirect(self, url):
+    """Redirect client to url. This discards any data that has been queued
+    to be sent to the user. But there should never by any anyway.
+    """
+    self.addheader('Location', url)
+    self.header(status='301 Moved')
+    self._wsgi_write('This document is located <a href="%s">here</a>.' % url)
+
+  def getenv(self, name, value=None):
+    return self._environ.get(name, value)
+
+  def params(self):
+    return cgi.parse(environ=self._environ, fp=self._environ["wsgi.input"])
+
+  def FieldStorage(self, fp=None, headers=None, outerboundary="",
+                   environ=os.environ, keep_blank_values=0, strict_parsing=0):
+    return cgi.FieldStorage(self._environ["wsgi.input"], headers,
+                            outerboundary, self._environ, keep_blank_values,
+                            strict_parsing)
+
+  def write(self, s):
+    self._wsgi_write(s)
+
+  def flush(self):
+    pass
+
+  def file(self):
+    return File(self)
 
 
 class AspServer(ThreadedServer):
@@ -218,9 +282,6 @@ class AspServer(ThreadedServer):
 
   def redirect(self, url):
     self.response.Redirect(url)
-
-  def escape(self, s, quote = None):
-    return self.server.HTMLEncode(str(s))
 
   def getenv(self, name, value = None):
     ret = self.request.ServerVariables(name)()
@@ -283,9 +344,6 @@ class ModPythonServer(ThreadedServer):
     self.request = request
     self.headerSent = 0
     
-    global cgi
-    import cgi
-
   def addheader(self, name, value):
     self.request.headers_out.add(name, value)
 
@@ -307,9 +365,6 @@ class ModPythonServer(ThreadedServer):
     self.request.status = mod_python.apache.HTTP_MOVED_TEMPORARILY
     self.request.write("You are being redirected to <a href=\"%s\">%s</a>"
                        % (url, url))
-
-  def escape(self, s, quote = None):
-    return cgi.escape(s, quote)
 
   def getenv(self, name, value = None):
     try:

@@ -1,6 +1,6 @@
 # -*-python-*-
 #
-# Copyright (C) 1999-2009 The ViewCVS Group. All Rights Reserved.
+# Copyright (C) 1999-2013 The ViewCVS Group. All Rights Reserved.
 #
 # By using this file, you agree to the terms and conditions set forth in
 # the LICENSE.html file which can be found at the top level of the ViewVC
@@ -16,7 +16,6 @@
 
 import sys
 import os
-import string
 import ConfigParser
 import fnmatch
 import vclib
@@ -29,99 +28,164 @@ from viewvcmagic import ContentMagic
 #########################################################################
 #
 # CONFIGURATION
+# -------------
 #
 # There are three forms of configuration:
 #
-#       1) edit the viewvc.conf created by the viewvc-install(er)
-#       2) as (1), but delete all unchanged entries from viewvc.conf
-#       3) do not use viewvc.conf and just edit the defaults in this file
+#    1. edit the viewvc.conf created by the viewvc-install(er)
+#    2. as (1), but delete all unchanged entries from viewvc.conf
+#    3. do not use viewvc.conf and just edit the defaults in this file
 #
 # Most users will want to use (1), but there are slight speed advantages
 # to the other two options. Note that viewvc.conf values are a bit easier
 # to work with since it is raw text, rather than python literal values.
 #
+#
+# A WORD ABOUT OPTION LAYERING/OVERRIDES
+# --------------------------------------
+#
+# ViewVC has three "layers" of configuration options:
+#
+#    1. base configuration options - very basic configuration bits
+#       found in sections like 'general', 'options', etc.
+#    2. vhost overrides - these options overlay/override the base
+#       configuration on a per-vhost basis.
+#    3. root overrides - these options overlay/override the base
+#       configuration and vhost overrides on a per-root basis.
+#
+# Here's a diagram of the valid overlays/overrides:
+#
+#         PER-ROOT          PER-VHOST            BASE
+#       
+#                         ,-----------.     ,-----------.
+#                         | vhost-*/  |     |           |
+#                         |  general  | --> |  general  |
+#                         |           |     |           |
+#                         `-----------'     `-----------'
+#       ,-----------.     ,-----------.     ,-----------.
+#       |  root-*/  |     | vhost-*/  |     |           |
+#       |  options  | --> |  options  | --> |  options  |
+#       |           |     |           |     |           |
+#       `-----------'     `-----------'     `-----------'
+#       ,-----------.     ,-----------.     ,-----------.
+#       |  root-*/  |     | vhost-*/  |     |           |
+#       | templates | --> | templates | --> | templates |
+#       |           |     |           |     |           |
+#       `-----------'     `-----------'     `-----------'
+#       ,-----------.     ,-----------.     ,-----------.
+#       |  root-*/  |     | vhost-*/  |     |           |
+#       | utilities | --> | utilities | --> | utilities |
+#       |           |     |           |     |           |
+#       `-----------'     `-----------'     `-----------'
+#                         ,-----------.     ,-----------.
+#                         | vhost-*/  |     |           |
+#                         |   cvsdb   | --> |   cvsdb   |
+#                         |           |     |           |
+#                         `-----------'     `-----------'
+#       ,-----------.     ,-----------.     ,-----------.
+#       |  root-*/  |     | vhost-*/  |     |           |
+#       |  authz-*  | --> |  authz-*  | --> |  authz-*  |
+#       |           |     |           |     |           |
+#       `-----------'     `-----------'     `-----------'
+#                                           ,-----------.
+#                                           |           |
+#                                           |  vhosts   |
+#                                           |           |
+#                                           `-----------'
+#                                           ,-----------.
+#                                           |           |
+#                                           |   query   |
+#                                           |           |
+#                                           `-----------'
+#
+# ### TODO:  Figure out what this all means for the 'kv' stuff.
+#
 #########################################################################
 
 class Config:
-  _sections = ('general', 'utilities', 'options', 'cvsdb', 'templates', 'rewritehtml')
-  _force_multi_value = ('cvs_roots', 'svn_roots', 'languages', 'kv_files',
-                        'root_parents', 'allowed_views', 'mime_types_files')
+  _base_sections = (
+    # Base configuration sections.
+    'authz-*',
+    'cvsdb',
+    'general',
+    'options',
+    'query',
+    'templates',
+    'utilities',
+    )
+  _force_multi_value = (
+    # Configuration values with multiple, comma-separated values.
+    'allowed_views',
+    'binary_mime_types',
+    'custom_log_formatting',
+    'cvs_roots',
+    'kv_files',
+    'languages',
+    'mime_types_files',
+    'root_parents',
+    'svn_roots',
+    )
+  _allowed_overrides = {
+    # Mapping of override types to allowed overridable sections.
+    'vhost' : ('authz-*',
+               'cvsdb',
+               'general',
+               'options',
+               'templates',
+               'utilities',
+               ),
+    'root'  : ('authz-*',
+               'options',
+               'templates',
+               'utilities',
+               )
+    }
 
   def __init__(self):
     self.__guesser = None
-    for section in self._sections:
+    self.root_options_overlayed = 0
+    for section in self._base_sections:
+      if section[-1] == '*':
+        continue
       setattr(self, section, _sub_config())
 
-  def load_config(self, pathname, vhost=None, rootname=None):
+  def load_config(self, pathname, vhost=None):
+    """Load the configuration file at PATHNAME, applying configuration
+    settings there as overrides to the built-in default values.  If
+    VHOST is provided, also process the configuration overrides
+    specific to that virtual host."""
+    
     self.conf_path = os.path.isfile(pathname) and pathname or None
     self.base = os.path.dirname(pathname)
     self.parser = ConfigParser.ConfigParser()
+    self.parser.optionxform = lambda x: x # don't case-normalize option names.
     self.parser.read(self.conf_path or [])
-
-    for section in self._sections:
-      if self.parser.has_section(section):
+    
+    for section in self.parser.sections():
+      if self._is_allowed_section(section, self._base_sections):
         self._process_section(self.parser, section, section)
 
     if vhost and self.parser.has_section('vhosts'):
       self._process_vhost(self.parser, vhost)
 
-    if rootname:
-      self._process_root_options(self.parser, rootname)
-    self.expand_root_parents()
-    r = {}
-    for i in self.rewritehtml.__dict__.keys():
-      if i[-8:] == '.replace':
-        if r.get(i[:-8], None) is None:
-          r[i[:-8]] = ['','']
-        r[i[:-8]][1] = self.rewritehtml.__dict__[i]
-      if i[-5:] == '.find':
-        if r.get(i[:-5], None) is None:
-          r[i[:-5]] = ['','']
-        r[i[:-5]][0] = self.rewritehtml.__dict__[i]
-    for i in r.keys():
-      if r[i][0] != '':
-        viewvc.add_rewrite_html(r[i][0], r[i][1])
-
-  def expand_root_parents(self):
-    """Expand the configured root parents into individual roots."""
-
-    # Each item in root_parents is a "directory : repo_type" string.
-    for pp in self.general.root_parents:
-      pos = string.rfind(pp, ':')
-      if pos < 0:
-        raise debug.ViewVCException(
-          "The path '%s' in 'root_parents' does not include a "
-          "repository type." % (pp))
-
-      repo_type = string.strip(pp[pos+1:])
-      pp = os.path.normpath(string.strip(pp[:pos]))
-
-      if repo_type == 'cvs':
-        roots = vclib.ccvs.expand_root_parent(pp)
-        if self.options.hide_cvsroot and roots.has_key('CVSROOT'):
-          del roots['CVSROOT']
-        self.general.cvs_roots.update(roots)
-      elif repo_type == 'svn':
-        roots = vclib.svn.expand_root_parent(pp)
-        self.general.svn_roots.update(roots)
-      else:
-        raise debug.ViewVCException(
-          "The path '%s' in 'root_parents' has an unrecognized "
-          "repository type." % (pp))
-
   def load_kv_files(self, language):
+    """Process the key/value (kv) files specified in the
+    configuration, merging their values into the configuration as
+    dotted heirarchical items."""
+    
     kv = _sub_config()
 
     for fname in self.general.kv_files:
       if fname[0] == '[':
-        idx = string.index(fname, ']')
-        parts = string.split(fname[1:idx], '.')
-        fname = string.strip(fname[idx+1:])
+        idx = fname.index(']')
+        parts = fname[1:idx].split('.')
+        fname = fname[idx+1:].strip()
       else:
         parts = [ ]
-      fname = string.replace(fname, '%lang%', language)
+      fname = fname.replace('%lang%', language)
 
       parser = ConfigParser.ConfigParser()
+      parser.optionxform = lambda x: x # don't case-normalize option names.
       parser.read(os.path.join(self.base, fname))
       for section in parser.sections():
         for option in parser.options(section):
@@ -139,75 +203,109 @@ class Config:
     return kv
 
   def path(self, path):
-    """Return path relative to the config file directory"""
+    """Return PATH relative to the config file directory."""
     return os.path.join(self.base, path)
 
   def _process_section(self, parser, section, subcfg_name):
+    if not hasattr(self, subcfg_name):
+      setattr(self, subcfg_name, _sub_config())
     sc = getattr(self, subcfg_name)
 
     for opt in parser.options(section):
       value = parser.get(section, opt)
       if opt in self._force_multi_value:
-        value = map(string.strip, filter(None, string.split(value, ',')))
+        value = map(lambda x: x.strip(), filter(None, value.split(',')))
       else:
         try:
           value = int(value)
         except ValueError:
           pass
 
+      ### FIXME: This feels like unnecessary depth of knowledge for a
+      ### semi-generic configuration object.
       if opt == 'cvs_roots' or opt == 'svn_roots':
         value = _parse_roots(opt, value)
 
       setattr(sc, opt, value)
 
+  def _is_allowed_section(self, section, allowed_sections):
+    """Return 1 iff SECTION is an allowed section, defined as being
+    explicitly present in the ALLOWED_SECTIONS list or present in the
+    form 'someprefix-*' in that list."""
+    
+    for allowed_section in allowed_sections:
+      if allowed_section[-1] == '*':
+        if _startswith(section, allowed_section[:-1]):
+          return 1
+      elif allowed_section == section:
+        return 1
+    return 0
+
+  def _is_allowed_override(self, sectype, secspec, section):
+    """Test if SECTION is an allowed override section for sections of
+    type SECTYPE ('vhosts' or 'root', currently) and type-specifier
+    SECSPEC (a rootname or vhostname, currently).  If it is, return
+    the overridden base section name.  If it's not an override section
+    at all, return None.  And if it's an override section but not an
+    allowed one, raise IllegalOverrideSection."""
+
+    cv = '%s-%s/' % (sectype, secspec)
+    lcv = len(cv)
+    if section[:lcv] != cv:
+      return None
+    base_section = section[lcv:]
+    if self._is_allowed_section(base_section,
+                                self._allowed_overrides[sectype]):
+      return base_section
+    raise IllegalOverrideSection(sectype, section)
+
   def _process_vhost(self, parser, vhost):
-    # find a vhost name for this vhost, if any (if not, we've nothing to do)
+    # Find a vhost name for this VHOST, if any (else, we've nothing to do).
     canon_vhost = self._find_canon_vhost(parser, vhost)
     if not canon_vhost:
       return
 
-    # overlay any option sections associated with this vhost name
-    cv = 'vhost-%s/' % (canon_vhost)
-    lcv = len(cv)
+    # Overlay any option sections associated with this vhost name.
     for section in parser.sections():
-      if section[:lcv] == cv:
-        base_section = section[lcv:]
-        if base_section not in self._sections:
-          raise IllegalOverrideSection('vhost', section)
+      base_section = self._is_allowed_override('vhost', canon_vhost, section)
+      if base_section:
         self._process_section(parser, section, base_section)
 
   def _find_canon_vhost(self, parser, vhost):
-    vhost = string.split(string.lower(vhost), ':')[0]  # lower-case, no port
+    vhost = vhost.lower().split(':')[0]  # lower-case, no port
     for canon_vhost in parser.options('vhosts'):
       value = parser.get('vhosts', canon_vhost)
-      patterns = map(string.lower, map(string.strip,
-                                       filter(None, string.split(value, ','))))
+      patterns = map(lambda x: x.lower().strip(),
+                     filter(None, value.split(',')))
       for pat in patterns:
         if fnmatch.fnmatchcase(vhost, pat):
           return canon_vhost
 
     return None
 
-  def _process_root_options(self, parser, rootname):
-    rn = 'root-%s/' % (rootname)
-    lrn = len(rn)
-    for section in parser.sections():
-      if section[:lrn] == rn:
-        base_section = section[lrn:]
-        if base_section in self._sections:
-          if base_section == 'general':
-            raise IllegalOverrideSection('root', section)
-          self._process_section(parser, section, base_section)
-        elif _startswith(base_section, 'authz-'):
-          pass
-        else:
-          raise IllegalOverrideSection('root', section)
-
   def overlay_root_options(self, rootname):
-    "Overly per-root options atop the existing option set."
+    """Overlay per-root options for ROOTNAME atop the existing option
+    set.  This is a destructive change to the configuration."""
+
+    did_overlay = 0
+    
     if not self.conf_path:
       return
-    self._process_root_options(self.parser, rootname)
+
+    for section in self.parser.sections():
+      base_section = self._is_allowed_override('root', rootname, section)
+      if base_section:
+        # We can currently only deal with root overlays happening
+        # once, so check that we've not yet done any overlaying of
+        # per-root options.
+        assert(self.root_options_overlayed == 0)
+        self._process_section(self.parser, section, base_section)
+        did_overlay = 1
+
+    # If we actually did any overlaying, remember this fact so we
+    # don't do it again later.
+    if did_overlay:
+      self.root_options_overlayed = 1
 
   def _get_parser_items(self, parser, section):
     """Basically implement ConfigParser.items() for pre-Python-2.3 versions."""
@@ -219,23 +317,66 @@ class Config:
         d[option] = parser.get(section, option)
       return d.items()
 
-  def get_authorizer_params(self, authorizer, rootname=None):
-    if not self.conf_path:
-      return {}
+  def get_authorizer_and_params_hack(self, rootname):
+    """Return a 2-tuple containing the name and parameters of the
+    authorizer configured for use with ROOTNAME.
 
+    ### FIXME: This whole thing is a hack caused by our not being able
+    ### to non-destructively overlay root options when trying to do
+    ### something like a root listing (which might need to get
+    ### different authorizer bits for each and every root in the list).
+    ### Until we have a good way to do that, we expose this function,
+    ### which assumes that base and per-vhost configuration has been
+    ### absorbed into this object and that per-root options have *not*
+    ### been overlayed.  See issue #371."""
+
+    # We assume that per-root options have *not* been overlayed.
+    assert(self.root_options_overlayed == 0)
+
+    if not self.conf_path:
+      return None, {}
+
+    # Figure out the authorizer by searching first for a per-root
+    # override, then falling back to the base/vhost configuration.
+    authorizer = None
+    root_options_section = 'root-%s/options' % (rootname)
+    if self.parser.has_section(root_options_section) \
+       and self.parser.has_option(root_options_section, 'authorizer'):
+      authorizer = self.parser.get(root_options_section, 'authorizer')
+    if not authorizer:
+      authorizer = self.options.authorizer
+
+    # No authorizer?  Get outta here.
+    if not authorizer:
+      return None, {}
+
+    # Dig up the parameters for the authorizer, starting with the
+    # base/vhost items, then overlaying any root-specific ones we find.
     params = {}
     authz_section = 'authz-%s' % (authorizer)
+    if hasattr(self, authz_section):
+      sub_config = getattr(self, authz_section)
+      for attr in dir(sub_config):
+        params[attr] = getattr(sub_config, attr)
+    root_authz_section = 'root-%s/authz-%s' % (rootname, authorizer)
     for section in self.parser.sections():
-      if section == authz_section:
+      if section == root_authz_section:
         for key, value in self._get_parser_items(self.parser, section):
           params[key] = value
-    if rootname:
-      root_authz_section = 'root-%s/authz-%s' % (rootname, authorizer)
-      for section in self.parser.sections():
-        if section == root_authz_section:
-          for key, value in self._get_parser_items(self.parser, section):
-            params[key] = value
-    params['__config'] = self
+    return authorizer, params
+
+  def get_authorizer_params(self, authorizer=None):
+    """Return a dictionary of parameter names and values which belong
+    to the configured authorizer (or AUTHORIZER, if provided)."""
+    params = {}
+    if authorizer is None:
+      authorizer = self.options.authorizer
+    if authorizer:
+      authz_section = 'authz-%s' % (self.options.authorizer)
+      if hasattr(self, authz_section):
+        sub_config = getattr(self, authz_section)
+        for attr in dir(sub_config):
+          params[attr] = getattr(sub_config, attr)
     return params
 
   def guesser(self):
@@ -272,11 +413,14 @@ class Config:
     self.options.allowed_views = ['annotate', 'diff', 'markup', 'roots']
     self.options.authorizer = None
     self.options.mangle_email_addresses = 0
+    self.options.custom_log_formatting = []
     self.options.default_file_view = "log"
+    self.options.binary_mime_types = []
     self.options.http_expiration_time = 600
     self.options.generate_etags = 1
     self.options.svn_ignore_mimetype = 0
     self.options.svn_config_dir = None
+    self.options.max_filesize_kbytes = 512
     self.options.use_rcsparse = 0
     self.options.sort_by = 'file'
     self.options.sort_group_dirs = 1
@@ -291,15 +435,18 @@ class Config:
     self.options.hr_ignore_keyword_subst = 1
     self.options.hr_intraline = 0
     self.options.allow_compress = 0
-    self.options.template_dir = "templates"
+    self.options.template_dir = "templates/default"
     self.options.docroot = None
     self.options.show_subdir_lastmod = 0
+    self.options.show_roots_lastmod = 0
     self.options.show_logs = 1
     self.options.show_log_in_markup = 1
-    self.options.cross_copies = 0
+    self.options.cross_copies = 1
     self.options.use_localtime = 0
+    self.options.iso8601_timestamps = 0
     self.options.short_log_len = 80
     self.options.enable_syntax_coloration = 1
+    self.options.tabsize = 8
     self.options.detect_encoding = 0
     self.options.use_cvsgraph = 0
     self.options.cvsgraph_conf = "cvsgraph.conf"
@@ -307,6 +454,7 @@ class Config:
     self.options.use_re_search = 0
     self.options.dir_pagesize = 0
     self.options.log_pagesize = 0
+    self.options.log_pagesextra = 3
     self.options.limit_changes = 100
     self.options.cvs_ondisk_charset = 'cp1251'
     self.options.binary_mime_re = '^(?!text/|.*\Wxml)'
@@ -352,17 +500,19 @@ class Config:
         'after_match: </span>\n'\
         'chunk_separator:  ... \n\n'
 
+    self.query.viewvc_base_url = None
+    
 def _startswith(somestr, substr):
   return somestr[:len(substr)] == substr
 
 def _parse_roots(config_name, config_value):
   roots = { }
   for root in config_value:
-    pos = string.find(root, ':')
-    if pos < 0:
+    try:
+      name, path = root.split(':', 1)
+    except:
       raise MalformedRoot(config_name, root)
-    name, path = map(string.strip, (root[:pos], root[pos+1:]))
-    roots[name] = path
+    roots[name.strip()] = path.strip()
   return roots
 
 class ViewVCConfigurationError(Exception):
@@ -388,10 +538,3 @@ class MalformedRoot(ViewVCConfigurationError):
 
 class _sub_config:
   pass
-
-if not hasattr(sys, 'hexversion'):
-  # Python 1.5 or 1.5.1. fix the syntax for ConfigParser options.
-  import regex
-  ConfigParser.option_cre = regex.compile('^\([-A-Za-z0-9._]+\)\(:\|['
-                                          + string.whitespace
-                                          + ']*=\)\(.*\)$')
