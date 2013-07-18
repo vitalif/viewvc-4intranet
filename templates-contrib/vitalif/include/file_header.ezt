@@ -1,0 +1,16 @@
+<p style="margin:0;">
+[is pathtype "file"]
+<a href="[up_href]"><img src="[docroot]/images/back_small.png" class="vc_icon" alt="Parent Directory" /></a> <a href="[up_href]">Parent Directory</a>
+[if-any log_href] 
+  | <a href="[log_href]"><img src="[docroot]/images/log.png" class="vc_icon" alt="Revision Log" /></a> <a href="[log_href]">Revision Log</a>
+[end]
+[if-any graph_href]
+  | <a href="[graph_href]"><img src="[docroot]/images/cvsgraph_16x16.png" class="vc_icon" alt="View Revision Graph" /></a> <a href="[graph_href]">Revision Graph</a>
+[end]
+[is view "diff"]
+  | <a href="[patch_href]"><img src="[docroot]/images/diff.png" class="vc_icon" alt="View Patch" /></a> <a href="[patch_href]">Patch</a>
+[end]
+[else]
+<a href="[view_href]"><img src="[docroot]/images/dir.png" class="vc_icon" alt="View Directory Listing" /></a> <a href="[view_href]">Directory Listing</a>
+[end]
+</p>

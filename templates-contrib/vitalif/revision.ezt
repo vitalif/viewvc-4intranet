@@ -1,0 +1,92 @@
+[# setup page definitions]
+  [define page_title]Revision [rev][end]
+  [define help_href][docroot]/help_rootview.html[end]
+[# end]
+
+[include "include/header.ezt" "revision"]
+
+<form method="get" action="[jump_rev_action]">
+<table class="vc_list auto" style="background-image:url([docroot]/images/lines45.gif)">
+  <tr align="left">
+    <td>Jump to revision:</th>
+    <td>
+      [for jump_rev_hidden_values]<input type="hidden" name="[jump_rev_hidden_values.name]" value="[jump_rev_hidden_values.value]"/>[end]
+      [if-any prev_href] <a href="[prev_href]" title="Previous Revision"><img src="[docroot]/images/back.png" alt="Previous" class="vc_rev_nbut" /></a>[end]
+      <input type="text" name="revision" value="[rev]" class="inp" style="width: 100px" />
+      <input type="submit" value="Go" />
+      [if-any next_href] <a href="[next_href]" title="Next Revision"><img src="[docroot]/images/forward.png" alt="Next" class="vc_rev_nbut" /></a>[end]
+    </td>
+  </tr>
+  <tr align="left">
+    <td>Author:</th>
+    <td>[if-any author][author][else]<em>(unknown author)</em>[end]</td>
+  </tr>
+  <tr align="left">
+    <td>Date:</th>
+    <td>[if-any date][date][else]<em>(unknown date)</em>[end]
+        [if-any ago]<em>([ago] ago)</em>[end]</td>
+  </tr>
+  <tr align="left">
+    <td>Log Message:</th>
+    <td><pre class="vc_log nm">[log]</pre></td>
+  </tr>
+</table>
+</form>
+
+<p><strong>Changed paths:</strong></p>
+
+[if-any more_changes]
+  <div>
+    Only [limit_changes] changes shown,
+    <a href="[more_changes_href]">display [more_changes] more changes...</a>
+  </div>
+[end]
+
+[if-any first_changes]
+  <div><a href="[first_changes_href]">Show only first [first_changes] changes...</div>
+[end]
+
+<table class="vc_list">
+  <thead>
+  <tr align="left" style="background-image:url([docroot]/images/lines-45gr.gif)">
+    <th class="vc_header_sort" style="background-image:url([docroot]/images/lines-45g.gif)">Path</th>
+    <th class="vc_header">Details</th>
+  </tr>
+  </thead>
+  <tbody>
+  [if-any changes]
+   [for changes]
+    <tr class="vc_row_[if-index changes even]even[else]odd[end]"[if-index changes even] style="background-image:url([docroot]/images/lines45.gif)"[end]>
+      <td>
+      [if-any changes.view_href]
+        [is changes.pathtype "dir"]
+          <a href="[changes.view_href]" title="View Directory Contents"><img src="[docroot]/images/dir.png" class="vc_icon" alt="Directory" /></a>
+          <a href="[changes.view_href]" title="View Directory Contents">[changes.path]/</a>
+        [else]
+          <a href="[changes.view_href]" title="View File Contents"><img src="[docroot]/images/text.png" class="vc_icon" alt="Directory" /></a>
+          <a href="[changes.view_href]" title="View File Contents">[changes.path]</a>
+        [end]
+      [else]
+        [is changes.pathtype "dir"]
+          <img src="[docroot]/images/dir.png" class="vc_icon" alt="Directory" />
+          [changes.path]/
+        [else]
+          <img src="[docroot]/images/text.png" class="vc_icon" alt="Directory" />
+          [changes.path]
+        [end]
+      [end]
+      [if-any changes.is_copy]<br /><em>(Copied from [changes.copy_path], r[changes.copy_rev])</em>[end]
+      </td>
+      <td>[if-any changes.log_href]<a href="[changes.log_href]" title="View Log">[end][changes.action][if-any changes.log_href]</a>[end]
+          [if-any changes.text_mods], [if-any changes.diff_href]<a href="[changes.diff_href]" title="View Diff">[end]text changed[if-any changes.diff_href]</a>[end][end]
+          [if-any changes.prop_mods], props changed[end]
+      </td>
+    </tr>
+   [end]
+  [else]
+    <tr><td colspan="5">No changed paths.</td></tr>
+  [end]
+  </tbody>
+</table>
+
+[include "include/footer.ezt"]

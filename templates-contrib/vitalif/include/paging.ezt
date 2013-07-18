@@ -1,0 +1,28 @@
+  [is picklist_len "0"]
+  [else]
+    [is picklist_len "1"]
+    [else]
+      <form method="get" action="[log_paging_action]" class="vc_page_form">
+        Pages:
+        [for picklist]
+          [is picklist.count log_pagestart]
+          <strong>[picklist.page]</strong>
+          [else]
+          <a href="[log_paging_action]?log_pagestart=[picklist.count][for log_paging_hidden_values]&[log_paging_hidden_values.name]=[log_paging_hidden_values.value][end]">[picklist.page]</a>
+          [end]
+        [end]
+        [for log_paging_hidden_values]<input type="hidden" name="[log_paging_hidden_values.name]" value="[log_paging_hidden_values.value]"/>[end]
+        <input type="submit" value="Go to:">
+        <select name="log_pagestart"  onchange="submit()" class="inp">
+          [for picklist]
+           [if-any picklist.more]
+            <option [is picklist.count log_pagestart]selected[end] value="[picklist.count]">Page [picklist.page]: [picklist.start] ...</option>
+           [else]
+            <option [is picklist.count log_pagestart]selected[end] value="[picklist.count]">Page [picklist.page]: [picklist.start] - [picklist.end]</option>
+           [end]
+          [end]
+        </select>
+      </form>
+    [end]
+  [end]
+
