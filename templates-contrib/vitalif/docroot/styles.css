@@ -38,6 +38,7 @@ table.fixed td {
 tr, td, th { vertical-align: top; }
 th { white-space: nowrap; }
 form { margin: 0; }
+select { background: white; }
 
 
 /*** Icons ***/
