@@ -1,3 +1,28 @@
+4Intra.net/CUSTIS improvements
+
+  * Support for full-text search over file contents, including binary
+    documents like *.doc and so on using Sphinx Search and Apache Tika
+    server. Patched Tika with fixes for #TIKA709 and #TIKA964 is highly
+    recommended:
+    http://wiki.4intra.net/public/tika-app-1.2-fix-TIKA709-TIKA964.jar
+    (SHA1 efef722a5e2322f7c2616d096552a48134dc5faa)
+  * Access right checks in query results.
+  * Access right checks for repository root directories.
+  * New query parameters: repository, repo type, revision number.
+  * Authorizer for CVSnt ACLs.
+  * InnoDB, additional database indexes and some search query
+    optimisations.
+  * Support for specifying path to MySQL UNIX socket.
+  * Asynchronous hook examples for updating SVN and CVS repos.
+  * Slightly more correct charset guessing, especially for Russian.
+  * Support for diffing added/removed files.
+  * File lists in RSS feeds for 'classic' template.
+  * Path configuration via a single 'viewvcinstallpath.py' file,
+    not via editing multiple bin/* files.
+  * Link to repository list instead of viewvc.org from the logo
+  * "rcsfile service" support used to workaround command execution
+    problems (forks) from Apache mod_python.
+
 Version 1.2.0 (released ??-???-????)
 
   * bumped minimum support Python version to 2.4

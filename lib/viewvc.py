@@ -14,7 +14,7 @@
 #
 # -----------------------------------------------------------------------
 
-__version__ = '1.2-dev-2243'
+__version__ = '1.2.svn2905+4intranet-1'
 
 # this comes from our library; measure the startup time
 import debug
@@ -39,6 +39,7 @@ import types
 import urllib
 import datetime
 import locale
+import string
 
 # These modules come from our library (the stub has set up the path)
 from common import _item, _RCSDIFF_NO_CHANGES, _RCSDIFF_IS_BINARY, _RCSDIFF_ERROR, TemplateData
@@ -152,7 +153,7 @@ class Request:
     roottype, rootpath, rootname = locate_root(self.cfg, rootname)
     if roottype:
       # Setup an Authorizer for this rootname and username
-      authorizer = setup_authorizer(self.cfg, self.username, self.rootname)
+      authorizer = setup_authorizer(self.cfg, self.username, rootname)
 
       # Create the repository object
       if roottype == 'cvs':
@@ -298,7 +299,7 @@ class Request:
         debug.t_start('select-repos')
         try:
           if self.repos.roottype() == 'cvs':
-            self.rootpath = vclib.ccvs.canonicalize_rootpath(rootpath)
+            self.rootpath = vclib.ccvs.canonicalize_rootpath(self.rootpath)
             self.repos = vclib.ccvs.CVSRepository(self.rootname,
                                                   self.rootpath,
                                                   self.auth,
@@ -308,7 +309,7 @@ class Request:
             # $CVSHeader$
             os.environ['CVSROOT'] = self.rootpath
           elif self.repos.roottype() == 'svn':
-            self.rootpath = vclib.svn.canonicalize_rootpath(rootpath)
+            self.rootpath = vclib.svn.canonicalize_rootpath(self.rootpath)
             self.repos = vclib.svn.SubversionRepository(self.rootname,
                                                         self.rootpath,
                                                         self.auth,
@@ -898,6 +899,7 @@ def setup_authorizer(cfg, username, rootname=None):
     return None
 
   # First, try to load a module with the configured name.
+  # FIXME FIXME FIXME This hack leads to ALL authorizers having 'viewvc.ViewVCAuthorizer' as their class name
   import imp
   fp = None
   try:
@@ -1212,7 +1214,6 @@ _re_rewrite_url = re.compile('((http|https|ftp|file|svn|svn\+ssh)'
 # Matches email addresses
 _re_rewrite_email = re.compile('([-a-zA-Z0-9_.\+]+)@'
                                '(([-a-zA-Z0-9]+\.)+[A-Za-z]{2,4})')
-_re_rewrites_html = [ [ _re_rewrite_url, r'<a href="\1">\1</a>' ] ]
 
 # Matches revision references
 _re_rewrite_svnrevref = re.compile(r'\b(r|rev #?|revision #?)([0-9]+)\b')
@@ -1305,9 +1306,6 @@ class ViewVCHtmlFormatter:
     else:
       trunc_s = mobj.group(1)[:maxlen]
       return self._entity_encode(trunc_s), len(trunc_s)
-
-  def format_utf8(self, mobj, userdata, maxlen=0):
-    return userdata(mobj.group(0))
 
   def format_svnrevref(self, mobj, userdata, maxlen=0):
     """Return a 2-tuple containing:
@@ -1450,21 +1448,21 @@ class LogFormatter:
 
   def get(self, maxlen=0, htmlize=1):
     cfg = self.request.cfg
-    
+
     # Prefer the cache.
     if self.cache.has_key((maxlen, htmlize)):
       return self.cache[(maxlen, htmlize)]
-    
+
+    # UTF-8 in CVS messages.
+    if self.request.roottype == 'cvs':
+      self.log = self.request.utf8(self.log)
+
     # If we are HTML-izing...
     if htmlize:
       # ...and we don't yet have ViewVCHtmlFormatter() object tokens...
       if not self.tokens:
         # ... then get them.
         lf = ViewVCHtmlFormatter()
-
-        # UTF-8 in CVS messages.
-        if self.request.roottype == 'cvs':
-          lf.add_formatter('.*', lf.format_utf8, self.request.utf8)
 
         # Rewrite URLs.
         lf.add_formatter(_re_rewrite_url, lf.format_url)
@@ -1611,6 +1609,7 @@ def common_template_data(request, revision=None, mime_type=None):
     'tarball_href' : None,
     'up_href'  : None,
     'username' : request.username,
+    'env_user_url' : os.environ.get('user_url', ''),
     'view'     : _view_codes[request.view_func],
     'view_href' : None,
     'vsn' : __version__,
@@ -1866,6 +1865,7 @@ def markup_stream(request, cfg, blame_data, file_lines, filename,
     c, encoding = cfg.guesser().guess_charset(content)
     if encoding:
       file_lines = c.rstrip('\n').split('\n')
+      file_lines = [ i+'\n' for i in file_lines ]
     else:
       encoding = 'unknown'
 
@@ -2042,7 +2042,7 @@ def markup_or_annotate(request, is_annotate):
 
   if not mime_type or mime_type == default_mime_type:
     try:
-      fp, revision = request.repos.openfile(path, rev)
+      fp, revision = request.repos.openfile(path, rev, {})
       mime_type = request.cfg.guesser().guess_mime(None, None, fp)
       fp.close()
     except:
@@ -2292,6 +2292,7 @@ def view_roots(request):
 
   # add in the roots for the selection
   roots = []
+  expand_root_parents(request.cfg)
   allroots = list_roots(request)
   if len(allroots):
     rootnames = allroots.keys()
@@ -2795,7 +2796,7 @@ def view_log(request):
   for rev in show_revs:
     entry = _item()
     entry.rev = rev.string
-    entry.state = (cvs and rev.dead and 'dead')
+    entry.state = (request.roottype == 'cvs' and rev.dead and 'dead')
     entry.author = rev.author
     entry.changed = rev.changed
     entry.date = make_time_string(rev.date, cfg)
@@ -4392,7 +4393,8 @@ def validate_query_args(request):
     # First, make sure the the XXX_match args have valid values:
     arg_match = arg_base + '_match'
     arg_match_value = request.query_dict.get(arg_match, 'exact')
-    if not arg_match_value in ('exact', 'like', 'glob', 'regex', 'notregex'):
+    if not arg_match_value in ('exact', 'like', 'glob', 'regex', 'notregex') and \
+        (arg_base != 'comment' or arg_match_value != 'fulltext'):
       raise debug.ViewVCException(
         'An illegal value was provided for the "%s" parameter.'
         % (arg_match),
@@ -4442,8 +4444,8 @@ def view_queryform(request):
 
   data = common_template_data(request)
   data.merge(TemplateData({
-    'repos' : request.server.escape(repos),
-    'repos_match' : request.server.escape(repos_match),
+    'repos' : request.server.escape(repos or ''),
+    'repos_match' : request.server.escape(repos_match or ''),
     'repos_type' : escaped_query_dict_get('repos_type', ''),
     'query_revision' : escaped_query_dict_get('query_revision', ''),
     'search_content' : escaped_query_dict_get('search_content', ''),
@@ -4855,8 +4857,8 @@ def query_patch(request, commits):
                                     '400 Bad Request')
     server_fp.write('Index: %s\n===================================================================\n' % (file))
     try:
-      rdate1, _, _, _ = repos.revinfo(rev1)
-      rdate2, _, _, _ = repos.revinfo(rev2)
+      rdate1, _, _, _, _ = repos.revinfo(rev1)
+      rdate2, _, _, _, _ = repos.revinfo(rev2)
       rdate1 = datetime.date.fromtimestamp(rdate1).strftime(' %Y/%m/%d %H:%M:%S')
       rdate2 = datetime.date.fromtimestamp(rdate2).strftime(' %Y/%m/%d %H:%M:%S')
     except vclib.UnsupportedFeature:
@@ -4868,7 +4870,7 @@ def query_patch(request, commits):
         p2 = _path_parts(repos.get_location(file, rev2, rev2))
       else:
         p2 = _path_parts(file)
-        fd, fr = repos.openfile(p2, rev2)
+        fd, fr = repos.openfile(p2, rev2, {})
         if not fd or rev2 != fr:
           raise vclib.ItemNotFound(p2)
         if fd:
@@ -4886,7 +4888,7 @@ def query_patch(request, commits):
           p1 = _path_parts(repos.get_location(p1, rev1, rev1))
       else:
         p1 = _path_parts(file)
-        fd, fr = repos.openfile(p1, rev1)
+        fd, fr = repos.openfile(p1, rev1, {})
         if fd:
           fd.close()
           rev1 = fr
@@ -5290,16 +5292,19 @@ def find_root_in_parents(cfg, rootname, roottype):
     if repo_type != roottype:
       continue
     pp = os.path.normpath(pp[:pos].strip())
-    
-    rootpath = None
-    if roottype == 'cvs':
-      rootpath = vclib.ccvs.find_root_in_parent(pp, rootname)
-    elif roottype == 'svn':
-      rootpath = vclib.svn.find_root_in_parent(pp, rootname)
 
-    if rootpath is not None:
-      return rootpath
-  return None
+    if roottype == 'cvs':
+      roots = vclib.ccvs.expand_root_parent(pp)
+    elif roottype == 'svn':
+      roots = vclib.svn.expand_root_parent(pp)
+    else:
+      roots = {}
+    if roots.has_key(rootname):
+      return roots[rootname], rootname
+    for (k, v) in roots.iteritems():
+      if v == rootname:
+        return rootname, k
+  return None, None
 
 def locate_root(cfg, rootname):
   """Return a 3-tuple ROOTTYPE, ROOTPATH, ROOTNAME for configured ROOTNAME.

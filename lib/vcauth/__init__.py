@@ -41,7 +41,7 @@ class GenericViewVCAuthorizer:
     pass
 
 
-
+
 ##############################################################################
 
 class ViewVCAuthorizer(GenericViewVCAuthorizer):

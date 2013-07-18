@@ -32,6 +32,8 @@ server = None
 # that character as-is, and sometimes needs to embed escaped values
 # into HTML attributes.
 def escape(s):
+  try: s = s.encode('utf8')
+  except: pass
   s = str(s)
   s = s.replace('&', '&amp;')
   s = s.replace('>', '&gt;')

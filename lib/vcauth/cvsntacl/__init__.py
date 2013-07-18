@@ -84,7 +84,7 @@ class ViewVCAuthorizer(vcauth.GenericViewVCAuthorizer):
 
   def check_path_access(self, rootname, path_parts, pathtype, rev=None):
     if not path_parts:
-      return 1
+      return self.check(rootname, [], '')
     if pathtype == vclib.DIR:
       return self.check(rootname, path_parts, '')
     f = path_parts[-1]

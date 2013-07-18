@@ -1,5 +1,7 @@
 ViewVC -- Viewing the content of CVS/SVN repositories with a Webbrowser.
 
+This is the 4Intra.net patched version with some extra features.
+
 Please read the file INSTALL for more information.
 
 And see windows/README for more information on running ViewVC on

@@ -363,6 +363,7 @@ class Config:
       if section == root_authz_section:
         for key, value in self._get_parser_items(self.parser, section):
           params[key] = value
+    params['__config'] = self
     return authorizer, params
 
   def get_authorizer_params(self, authorizer=None):
@@ -377,6 +378,7 @@ class Config:
         sub_config = getattr(self, authz_section)
         for attr in dir(sub_config):
           params[attr] = getattr(sub_config, attr)
+    params['__config'] = self
     return params
 
   def guesser(self):

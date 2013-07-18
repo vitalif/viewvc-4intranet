@@ -392,7 +392,7 @@ class _diff_fp:
       args.extend(["-L", self._label(info1), "-L", self._label(info2)])
     args.extend([temp1, temp2])
     args.insert(0, diff_cmd)
-    os.system("'"+"' '".join(args)+"' &> "+self.temp3)
+    os.system("'"+"' '".join(args)+"' > '"+self.temp3+"' 2> '"+self.temp3+"'")
     self.fp = open(self.temp3, 'rb')
     self.fp.seek(0)
 

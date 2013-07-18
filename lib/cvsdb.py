@@ -14,6 +14,7 @@ import sys
 import time
 import re
 import cgi
+import string
 
 import vclib
 import dbi
@@ -530,7 +531,7 @@ class CheckinDatabase:
             ' AND dirid=dirs.id AND fileid=files.id' % (commits_table, commits_table, commits_table, ','.join(ids))
         )
 
-    def CreateSQLQueryString(self, query):
+    def CreateSQLQueryString(self, query, detect_leftover=0):
         commits_table = self.GetCommitsTable()
         fields = [
             commits_table+".*",
@@ -692,7 +693,7 @@ class CheckinDatabase:
                 revision = rows[docid]['revision']
                 fp = None
                 try:
-                    fp, _ = self.request.get_repo(repo).repos.openfile(path, revision)
+                    fp, _ = self.request.get_repo(repo).repos.openfile(path, revision, {})
                     content = fp.read()
                     fp.close()
                     content = self.guesser.utf8(content)
@@ -757,13 +758,14 @@ class CheckinDatabase:
             rows = self.RunSphinxQuery(query)
         else:
             # Use regular queries when document content is not searched
-            rows = self.selectall(self.db, self.CreateSQLQueryString(query))
+            rows = self.selectall(self.db, self.CreateSQLQueryString(query, 1))
             # Check rights
             rows = (r for r in rows if self.check_commit_access(
                 r['repository_name'],
                 r['dir_name'],
                 r['file_name'],
                 r['revision']))
+        query.SetExecuted()
 
         # Convert rows to commit objects
         for row in rows:
@@ -1211,15 +1213,13 @@ def CreateCommit():
 def CreateCheckinQuery():
     return CheckinDatabaseQuery()
 
-def ConnectDatabase(cfg, readonly=0):
-    if readonly:
-        user = cfg.cvsdb.readonly_user
-        passwd = cfg.cvsdb.readonly_passwd
-    else:
-        user = cfg.cvsdb.user
-        passwd = cfg.cvsdb.passwd
-    db = CheckinDatabase(cfg.cvsdb.host, cfg.cvsdb.port, user, passwd,
-                         cfg.cvsdb.database_name)
+def ConnectDatabase(cfg, request=None, readonly=0):
+    db = CheckinDatabase(
+        readonly = readonly,
+        request = request,
+        cfg = cfg.cvsdb,
+        guesser = cfg.guesser(),
+    )
     db.Connect()
     return db
 
