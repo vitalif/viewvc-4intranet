@@ -4937,7 +4937,7 @@ def query_custispatcher(request, commits):
         if fn not in by_fn or rev_cmp(by_fn[fn][1], fileinfo.rev) < 0:
           if sp4:
             parts = _path_parts(fn)
-            fd, _ = fileinfo.root.repos.openfile(parts, fileinfo.rev)
+            fd, _ = fileinfo.root.repos.openfile(parts, fileinfo.rev, {})
             header = fd.read(4096)
             fd.close()
             # Try to find _package() declaration with schema in file header
@@ -4956,7 +4956,7 @@ def query_custispatcher(request, commits):
               '  <proc name="ini"/>\n  <proc name="ini-gen"/>\n</put>\n'
           by_fn[fn] = [s, fileinfo.rev, schema]
     if found:
-      msgs[re.sub(r'<[^>]*?>', '', commit.short_log).replace('&nbsp;', ' ').strip().encode('utf-8')] = 1
+      msgs[re.sub(r'<[^>]*?>', '', commit.short_log).replace('&nbsp;', ' ').strip()] = 1
   r = ''
   r2 = ''
   r3 = ''
