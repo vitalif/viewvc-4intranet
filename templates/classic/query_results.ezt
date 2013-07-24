@@ -31,6 +31,7 @@
 </p>
 [if-any custispatcher_href]
 <p><a href="[custispatcher_href]">Show XML slug for CustIS patcher</a></p>
+<p><a href="[custispatcher_href]&xml=1">Show typical CustIS patcher hotfix XML</a></p>
 [end]
 
 <p><strong>+[plus_count]/-[minus_count]</strong> changed lines total.</p>

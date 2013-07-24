@@ -29,6 +29,10 @@
     <a href="[patch_href]">Show a patch built from these changes</a>
     [if-any patch_unsecure]<br /><b>CAUTION: selected changes are not contiguous, patch may include differences from other commits.</b>[end]
 </p>
+[if-any custispatcher_href]
+<p><a href="[custispatcher_href]">Show XML slug for CustIS patcher</a></p>
+<p><a href="[custispatcher_href]&xml=1">Show typical CustIS patcher hotfix XML</a></p>
+[end]
 
 <p><strong>+[plus_count]/-[minus_count]</strong> lines changed.</p>
 

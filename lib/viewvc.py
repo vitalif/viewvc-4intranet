@@ -40,6 +40,7 @@ import urllib
 import datetime
 import locale
 import string
+import cgi
 
 # These modules come from our library (the stub has set up the path)
 from common import _item, _RCSDIFF_NO_CHANGES, _RCSDIFF_IS_BINARY, _RCSDIFF_ERROR, TemplateData
@@ -820,6 +821,9 @@ _legal_params = {
 
   # FeedOnFeeds sudo authorization
   'fof_sudo'      : None,
+
+  # Custispatcher parameter
+  'xml'           : None,
   }
 
 def _path_join(path_parts):
@@ -4915,15 +4919,12 @@ def query_patch(request, commits):
 # FIXME Remove this from here to some hook package
 # CustIS "patcher" format for PL/SQL packages (Bug 96691)
 # <put file="../i-basket/pi_shp_basket_cards.sp4" revision="1.364" schema="*ADMIN"/>
-def query_custispatcher(request, commits):
-  request.server.header('text/plain')
-  if not commits:
-    print '# No changes were selected by the query.'
-    print '# There is nothing to show.'
-    return
+def custispatcher_slug(commits):
   header_re = re.compile('^\s*_package\s*\(\s*[^,]*,\s*([^,\s]+)', re.M)
   by_fn = {}
+  bugmsg = re.compile('bug\s*(\d+)', re.I)
   msgs = {}
+  bugs = {}
   for commit in commits:
     found = 0
     for fileinfo in commit.files:
@@ -4933,6 +4934,7 @@ def query_custispatcher(request, commits):
       if sp4 or xml:
         found = 1
         fn = _path_join([fileinfo.dir, fileinfo.file])
+        rfn = fn.replace('sm-code/shop/', '../')
         # Only latest revision of each file
         if fn not in by_fn or rev_cmp(by_fn[fn][1], fileinfo.rev) < 0:
           if sp4:
@@ -4946,23 +4948,28 @@ def query_custispatcher(request, commits):
               schema = schema.group(1)
             else:
               schema = ''
-            s = '<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*'+schema+'" />\n'
+            s = '<put file="'+rfn+'" revision="'+fileinfo.rev+'" schema="*'+schema+'" />\n'
           elif xml:
             schema = 'HARDCODE'
-            s = '\n<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*OWNER">\n'+\
+            s = '\n<put file="'+rfn+'" revision="'+fileinfo.rev+'" schema="*OWNER">\n'+\
               '  <proc name="store-dyn"/>\n  <proc name="package-get"/>\n'+\
               '  <proc name="trigger"/>\n  <proc name="grant"/>\n</put>\n'+\
-              '<put file="'+fn+'" revision="'+fileinfo.rev+'" schema="*ADMIN">\n'+\
+              '<put file="'+rfn+'" revision="'+fileinfo.rev+'" schema="*ADMIN">\n'+\
               '  <proc name="ini"/>\n  <proc name="ini-gen"/>\n</put>\n'
           by_fn[fn] = [s, fileinfo.rev, schema]
     if found:
-      msgs[re.sub(r'<[^>]*?>', '', commit.short_log).replace('&nbsp;', ' ').strip()] = 1
+      msg = re.sub(r'<[^>]*?>', '', commit.short_log).replace('&nbsp;', ' ').strip()
+      b = bugmsg.match(msg)
+      if b:
+        bugs[b.group(1)] = 1
+      msgs[msg] = 1
+  bugs = bugs.keys()
   r = ''
   r2 = ''
   r3 = ''
   # Put commit messages first
   if len(msgs):
-    r += '<!-- '+'\n'.join(msgs.keys())+' -->\n'
+    r += '<!-- '+'\n'.join(msgs.keys())+' -->\n\n'
   # Then schema OWNER, then others, then XML files
   for i in by_fn:
     if by_fn[i][2] == 'OWNER':
@@ -4973,6 +4980,41 @@ def query_custispatcher(request, commits):
       r2 += by_fn[i][0]
   r += r2
   r += r3
+  return r, bugs
+
+def query_custispatcher(request, commits):
+  request.server.header('text/plain')
+  if not commits:
+    print '# No changes were selected by the query.'
+    print '# There is nothing to show.'
+    return
+  r, bugs = custispatcher_slug(commits)
+  if request.query_dict.get('xml', None):
+    global cvsdb
+    import cvsdb
+    db = cvsdb.ConnectDatabaseReadOnly(request.cfg, request)
+    # In the spirit of the whole ugly hack read bug descriptions directly from the DB
+    sql = "SELECT short_desc, cf_extbug FROM bugs3.bugs WHERE bug_id=%s"
+    ext_descs = ''
+    extbugs = []
+    for b in bugs:
+      cursor = db.db.cursor()
+      cursor.execute(sql, (b, ))
+      try:
+        (short_desc, cf_extbug) = cursor.fetchone()
+        if cf_extbug:
+          cursor.execute(sql, (cf_extbug, ))
+          (extbug_desc, _) = cursor.fetchone()
+          ext_descs += extbug_desc.encode('utf-8')+'\n'
+          extbugs.append(str(cf_extbug))
+      except:
+        raise
+    r = '<hotfix name="bug'+'_'.join(extbugs)+'" for-versions="" bugs="'+' '.join(bugs)+'">\n\
+  <description>'+cgi.escape(ext_descs.rstrip())+'</description>\n\
+  <portion num="" repeatable="1" deploy-safety="dangerous">\n\
+    '+r.rstrip().replace('\n', '\n    ')+'\n\
+  </portion>\n\
+</hotfix>\n'
   server_fp = get_writeready_server_file(request, 'text/plain')
   server_fp.write(r)
 
