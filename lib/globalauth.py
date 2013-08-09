@@ -1,0 +1,269 @@
+# -*-python-*-
+# -----------------------------------------------------------------------
+# Simple Global Authentication client for ViewVC
+# License: GPLv2+
+# Author: Vitaliy Filippov
+# -----------------------------------------------------------------------
+#
+# USAGE:
+#
+# import globalauth
+# c = globalauth.GlobalAuthClient()
+# try:
+#   c.auth(server)
+#   user_name = c.user_name
+#   user_url = c.user_url
+# except globalauth.ServerReturn:
+#   STOP REQUEST PROCESSING HERE WITHOUT ERROR
+#
+# -----------------------------------------------------------------------
+
+import os
+import re
+import sys
+import struct
+import cgi
+import binascii
+import time
+import datetime
+import urllib2
+import anyjson
+import random
+import Cookie
+
+import ga_config
+
+class ServerReturn(Exception):
+
+  def __init__(self, code):
+    self.code = code
+
+class FileCache:
+
+  def __init__(self, dir):
+    self.dir = dir
+
+  def fn(self, key):
+    key = re.sub('([^a-zA-Z0-9_\-]+)', lambda x: binascii.hexlify(x.group(1)), key)
+    return self.dir+'/'+key
+
+  def clean(self):
+    t = time.time()
+    for fn in os.listdir(self.dir):
+      if t > os.stat(self.dir+'/'+fn).st_mtime:
+        os.unlink(self.dir+'/'+fn)
+
+  def set(self, key, value, expire = 86400):
+    fn = self.fn(key)
+    try:
+      f = open(fn,'w')
+      if not expire:
+        expire = 86400
+      expire = time.time()+expire
+      f.write(value)
+      f.close()
+      os.chmod(fn, 0600)
+      os.utime(fn, (expire, expire))
+    except:
+      raise
+    return 1
+
+  def get(self, key):
+    fn = self.fn(key)
+    try:
+      f = open(fn,'r')
+      value = f.read()
+      f.close()
+      if time.time() > os.stat(fn).st_mtime:
+        os.unlink(fn)
+        return ''
+      return value
+    except:
+      pass
+    return ''
+
+  def delete(self, key):
+    fn = self.fn(key)
+    try:
+      os.unlink(fn)
+    except:
+      pass
+
+class GlobalAuthClient:
+
+  wd = { 0 : 'Mon', 1 : 'Tue', 2 : 'Wed', 3 : 'Thu', 4 : 'Fri', 5 : 'Sat', 6 : 'Sun' }
+  ms = { 1 : 'Jan', 2 : 'Feb', 3 : 'Mar', 4 : 'Apr', 5 : 'May', 6 : 'Jun', 7 : 'Jul', 8 : 'Aug', 9 : 'Sep', 10 : 'Oct', 11 : 'Nov', 12 : 'Dec' }
+
+  def __init__(self, server):
+    self.server = server
+    self.v = server.params()
+    self.cookies = Cookie.SimpleCookie()
+    self.cookies.load(self.server.getenv('HTTP_COOKIE'))
+    self.user_name = ''
+    self.user_url = ''
+
+    if not ga_config.gac.get('globalauth_server', '') and not ga_config.gac.get('fof_sudo_server', ''):
+      raise Exception('ga_config.gac must contain at least globalauth_server="URL" or fof_sudo_server="URL"')
+
+    self.gac = {
+      'cookie_name'       : 'simple_global_auth',
+      'cookie_expire'     : 86400*7,
+      'cookie_path'       : '/',
+      'cookie_domain'     : '',
+      'globalauth_server' : '',
+      'cache_dir'         : os.path.abspath(os.path.dirname(__file__))+'/cache',
+      'cut_email_at'      : 0,
+      'ga_always_require' : 0,
+      'fof_sudo_server'   : '',
+      'fof_sudo_cookie'   : 'fof_sudo_id',
+      'gc_probability'    : 20,
+    }
+
+    for i in gac:
+      if ga_config.gac.get(i, None) is not None:
+        self.gac[i] = ga_config.gac[i]
+
+    self.cache = FileCache(self.gac['cache_dir'])
+
+  def auth(self):
+    if self.gac['fof_sudo_server'] != '':
+      self.auth_fof_sudo()
+    if os.environ['REMOTE_USER'] == '' and self.gac['globalauth_server'] != '':
+      self.auth_ga()
+
+  def auth_ga(self):
+    i = random.randint(1, self.gac['gc_probability'])
+    if i == 1:
+      self.cache.clean()
+    r_id = self.cookies.get(self.gac['cookie_name'], '')
+    if r_id:
+      r_id = r_id.value
+    ga_id = self.v.get('ga_id', '')
+    if self.v.get('ga_client', None):
+      self.ga_client(r_id, ga_id)
+      return
+    r_data = ''
+    if r_id == 'nologin':
+      r_data = 'nologin'
+    elif r_id != '':
+      r_data = self.cache.get('D'+r_id)
+      if r_data != 'nologin':
+        try: r_data = anyjson.deserialize(r_data)
+        except: r_data = ''
+    is_browser = re.match('opera|firefox|chrome|safari', self.server.getenv('HTTP_USER_AGENT'), re.I)
+    if not r_data and (is_browser or self.gac['ga_always_require']) or self.v.get('ga_require', None):
+      self.ga_begin()
+    elif r_data and r_data != 'nologin':
+      self.set_user(r_data)
+
+  def ga_client(self, r_id, ga_id):
+    ga_key = self.v.get('ga_key', '')
+    if ga_key != '' and ga_key == self.cache.get('K'+ga_id):
+      # Server-to-server request
+      self.cache.delete('K'+ga_id)
+      data = ''
+      if self.v.get('ga_nologin','') != '':
+        data = 'nologin'
+      else:
+        try: data = anyjson.deserialize(self.v.get('ga_data',''))
+        except: raise
+      if data != '':
+        if data != 'nologin':
+          data = anyjson.serialize(data)
+        self.cache.set('D'+ga_id, data)
+        self.server.header('text/plain')
+        self.server.write('1')
+        raise ServerReturn(200)
+    elif ga_key == '' and r_id != ga_id:
+      # User redirect with different key
+      d = self.cache.get('D'+ga_id)
+      if d != 'nologin' and d != '':
+        try: d = anyjson.deserialize(d)
+        except: d = ''
+      if d != '':
+        self.setcookie(ga_id)
+        self.server.redirect(self.clean_uri())
+        raise ServerReturn(301)
+    self.server.header('text/plain')
+    self.server.write('GlobalAuth key doesn\'t match')
+    raise ServerReturn(404)
+
+  def ga_begin(self):
+    ga_id = binascii.hexlify(os.urandom(16))
+    ga_key = binascii.hexlify(os.urandom(16))
+    url = self.gac['globalauth_server']
+    if url.find('?') != -1:
+      url = url+'&'
+    else:
+      url = url+'?'
+    try:
+      resp = urllib2.urlopen(url+'ga_id='+urllib2.quote(ga_id)+'&ga_key='+urllib2.quote(ga_key))
+      resp.read()
+      if resp.code != 200:
+        raise Exception(resp)
+    except:
+      self.setcookie('nologin')
+      self.server.redirect(self.clean_uri())
+      raise ServerReturn(301)
+    return_uri = 'http://'+self.server.getenv('HTTP_HOST')+self.server.getenv('REQUEST_URI')+'?ga_client=1';
+    if self.v:
+      return_uri = return_uri+'&'+urllib.urlencode(self.v)
+    self.cache.set('K'+ga_id, ga_key)
+    url = url+'ga_id='+urllib2.quote(ga_id)+'&ga_url='+urllib2.quote(return_uri)
+    if self.v.get('ga_require', '') == '' and not self.gac['ga_always_require']:
+      url = url+'&ga_check=1'
+    self.server.redirect(url)
+    raise ServerReturn(301)
+
+  def auth_fof_sudo(self):
+    sudo_id = self.cookies.get(self.gac['fof_sudo_cookie'], '')
+    if sudo_id:
+      sudo_id = sudo_id.value
+    if sudo_id != '':
+      url = self.gac['fof_sudo_server']
+      if url.find('?') != -1:
+        url = url+'&'
+      else:
+        url = url+'?'
+      try:
+        resp = urllib2.urlopen(url+'id='+urllib2.quote(sudo_id))
+        d = resp.read()
+        if resp.code != 200:
+          raise Exception(resp)
+        d = anyjson.deserialize(d)
+        self.set_user(d)
+      except:
+        pass
+
+  def log(self, s):
+    sys.stderr.write(s+"\n")
+    sys.stderr.flush()
+
+  def setcookie(self, value):
+    dom = self.gac['cookie_domain']
+    if not dom:
+      dom = server.getenv('HTTP_HOST')
+    exp = ''
+    if self.gac['cookie_expire'] > 0:
+      tm = int(time.time()+self.gac['cookie_expire'])
+      tm = datetime.datetime.utcfromtimestamp(tm)
+      tm = "%s, %02d-%s-%04d %02d:%02d:%02d GMT" % (self.wd[tm.weekday()], tm.day, self.ms[tm.month], tm.year, tm.hour, tm.minute, tm.second)
+      exp = '; expires='+tm
+    self.server.addheader('Set-Cookie', "%s=%s; path=%s; domain=%s%s" % (self.gac['cookie_name'], value, self.gac['cookie_path'], dom, exp))
+
+  def clean_uri(self):
+    uriargs = self.v.copy()
+    for i in [ 'ga_id', 'ga_res', 'ga_key', 'ga_client', 'ga_nologin', 'ga_require' ]:
+      uriargs.pop(i, None)
+    uri = 'http://'+self.server.getenv('HTTP_HOST')+self.server.getenv('REQUEST_URI')+'?'+urllib.urlencode(uriargs)
+    return uri
+
+  def set_user(self, r_data):
+    r_email = r_data.get('user_email', '').encode('utf-8')
+    r_url = r_data.get('user_url', '').encode('utf-8')
+    if self.gac['cut_email_at']:
+      p = r_email.find('@')
+      if p != -1:
+        r_email = r_email[0:p]
+    self.user_name = r_email
+    self.user_url = r_url
