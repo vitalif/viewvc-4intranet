@@ -9,12 +9,11 @@
 #
 # import globalauth
 # c = globalauth.GlobalAuthClient()
-# try:
-#   c.auth(server)
-#   user_name = c.user_name
-#   user_url = c.user_url
-# except globalauth.ServerReturn:
-#   STOP REQUEST PROCESSING HERE WITHOUT ERROR
+# c.auth(server)
+# user_name = c.user_name
+# user_url = c.user_url
+#
+# auth() will call sys.exit() when it needs to stop request processing
 #
 # -----------------------------------------------------------------------
 
@@ -26,6 +25,7 @@ import cgi
 import binascii
 import time
 import datetime
+import urllib
 import urllib2
 import anyjson
 import random
@@ -33,15 +33,12 @@ import Cookie
 
 import ga_config
 
-class ServerReturn(Exception):
-
-  def __init__(self, code):
-    self.code = code
-
 class FileCache:
 
   def __init__(self, dir):
     self.dir = dir
+    if not os.path.isdir(dir):
+      os.mkdir(dir)
 
   def fn(self, key):
     key = re.sub('([^a-zA-Z0-9_\-]+)', lambda x: binascii.hexlify(x.group(1)), key)
@@ -95,10 +92,18 @@ class GlobalAuthClient:
   ms = { 1 : 'Jan', 2 : 'Feb', 3 : 'Mar', 4 : 'Apr', 5 : 'May', 6 : 'Jun', 7 : 'Jul', 8 : 'Aug', 9 : 'Sep', 10 : 'Oct', 11 : 'Nov', 12 : 'Dec' }
 
   def __init__(self, server):
+
     self.server = server
-    self.v = server.params()
+    self.v = {}
+    for name, values in server.params().items():
+      self.v[name] = values[0]
+    fs = server.FieldStorage()
+    for name in fs:
+      self.v[name] = fs[name].value
+
     self.cookies = Cookie.SimpleCookie()
-    self.cookies.load(self.server.getenv('HTTP_COOKIE'))
+    # '' default value is needed here - else we die here under WSGI without any exception O_o
+    self.cookies.load(self.server.getenv('HTTP_COOKIE', ''))
     self.user_name = ''
     self.user_url = ''
 
@@ -119,16 +124,16 @@ class GlobalAuthClient:
       'gc_probability'    : 20,
     }
 
-    for i in gac:
+    for i in self.gac:
       if ga_config.gac.get(i, None) is not None:
         self.gac[i] = ga_config.gac[i]
 
     self.cache = FileCache(self.gac['cache_dir'])
 
   def auth(self):
-    if self.gac['fof_sudo_server'] != '':
+    if self.gac['fof_sudo_server']:
       self.auth_fof_sudo()
-    if os.environ['REMOTE_USER'] == '' and self.gac['globalauth_server'] != '':
+    if not self.user_name and self.gac['globalauth_server']:
       self.auth_ga()
 
   def auth_ga(self):
@@ -139,7 +144,9 @@ class GlobalAuthClient:
     if r_id:
       r_id = r_id.value
     ga_id = self.v.get('ga_id', '')
-    if self.v.get('ga_client', None):
+    self.log('vars: '+anyjson.serialize(self.v))
+    self.log('ga_client? '+self.v.get('ga_client', ''))
+    if self.v.get('ga_client', ''):
       self.ga_client(r_id, ga_id)
       return
     r_data = ''
@@ -158,7 +165,9 @@ class GlobalAuthClient:
 
   def ga_client(self, r_id, ga_id):
     ga_key = self.v.get('ga_key', '')
-    if ga_key != '' and ga_key == self.cache.get('K'+ga_id):
+    self.log('vars: '+anyjson.serialize(self.v))
+    self.log('s2s? '+ga_key+' '+self.cache.get('K'+ga_id))
+    if ga_key and ga_key == self.cache.get('K'+ga_id):
       # Server-to-server request
       self.cache.delete('K'+ga_id)
       data = ''
@@ -173,7 +182,7 @@ class GlobalAuthClient:
         self.cache.set('D'+ga_id, data)
         self.server.header('text/plain')
         self.server.write('1')
-        raise ServerReturn(200)
+        sys.exit()
     elif ga_key == '' and r_id != ga_id:
       # User redirect with different key
       d = self.cache.get('D'+ga_id)
@@ -183,19 +192,15 @@ class GlobalAuthClient:
       if d != '':
         self.setcookie(ga_id)
         self.server.redirect(self.clean_uri())
-        raise ServerReturn(301)
-    self.server.header('text/plain')
+        sys.exit()
+    self.server.header('text/plain', status=404)
     self.server.write('GlobalAuth key doesn\'t match')
-    raise ServerReturn(404)
+    sys.exit()
 
   def ga_begin(self):
     ga_id = binascii.hexlify(os.urandom(16))
     ga_key = binascii.hexlify(os.urandom(16))
-    url = self.gac['globalauth_server']
-    if url.find('?') != -1:
-      url = url+'&'
-    else:
-      url = url+'?'
+    url = self.add_param(self.gac['globalauth_server'], '')
     try:
       resp = urllib2.urlopen(url+'ga_id='+urllib2.quote(ga_id)+'&ga_key='+urllib2.quote(ga_key))
       resp.read()
@@ -204,16 +209,22 @@ class GlobalAuthClient:
     except:
       self.setcookie('nologin')
       self.server.redirect(self.clean_uri())
-      raise ServerReturn(301)
-    return_uri = 'http://'+self.server.getenv('HTTP_HOST')+self.server.getenv('REQUEST_URI')+'?ga_client=1';
-    if self.v:
-      return_uri = return_uri+'&'+urllib.urlencode(self.v)
+      sys.exit()
+    return_uri = 'http://'+self.server.getenv('HTTP_HOST')+self.server.getenv('REQUEST_URI')
+    return_uri = self.add_param(return_uri, 'ga_client=1')
     self.cache.set('K'+ga_id, ga_key)
     url = url+'ga_id='+urllib2.quote(ga_id)+'&ga_url='+urllib2.quote(return_uri)
     if self.v.get('ga_require', '') == '' and not self.gac['ga_always_require']:
       url = url+'&ga_check=1'
     self.server.redirect(url)
-    raise ServerReturn(301)
+    sys.exit()
+
+  def add_param(self, url, param):
+    if url.find('?') != -1:
+      url = url+'&'
+    else:
+      url = url+'?'
+    return url+param
 
   def auth_fof_sudo(self):
     sudo_id = self.cookies.get(self.gac['fof_sudo_cookie'], '')
@@ -255,7 +266,7 @@ class GlobalAuthClient:
     uriargs = self.v.copy()
     for i in [ 'ga_id', 'ga_res', 'ga_key', 'ga_client', 'ga_nologin', 'ga_require' ]:
       uriargs.pop(i, None)
-    uri = 'http://'+self.server.getenv('HTTP_HOST')+self.server.getenv('REQUEST_URI')+'?'+urllib.urlencode(uriargs)
+    uri = 'http://'+self.server.getenv('HTTP_HOST')+self.server.getenv('SCRIPT_NAME')+'?'+urllib.urlencode(uriargs)
     return uri
 
   def set_user(self, r_data):

@@ -54,6 +54,8 @@ import vclib
 import vclib.ccvs
 import vclib.svn
 
+import globalauth
+
 try:
   import idiff
 except (SyntaxError, ImportError):
@@ -121,6 +123,14 @@ class Request:
 
     # check for an authenticated username
     self.username = server.getenv('REMOTE_USER')
+
+    self.user_url = ''
+    if not self.username:
+      # try to authenticate using SimpleGlobalAuth
+      c = globalauth.GlobalAuthClient(server)
+      c.auth()
+      self.username = c.user_name
+      self.user_url = c.user_url
 
     # repository object cache
     self.all_repos = {}
@@ -1609,7 +1619,7 @@ def common_template_data(request, revision=None, mime_type=None):
     'tarball_href' : None,
     'up_href'  : None,
     'username' : request.username,
-    'env_user_url' : os.environ.get('user_url', ''),
+    'user_url' : request.user_url,
     'view'     : _view_codes[request.view_func],
     'view_href' : None,
     'vsn' : __version__,

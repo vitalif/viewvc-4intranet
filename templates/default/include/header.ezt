@@ -18,7 +18,7 @@
 <div id="vc_header">
 
 <div id="vc_topmatter">
-[if-any username]Logged in as: <strong>[username]</strong> |[end]
+[if-any username]Logged in as: <strong>[if-any user_url]<a href="[user_url]">[username]</a>[else][username][end]</strong> |[end]
 <a href="[help_href]">ViewVC Help</a>
 </div>
 
