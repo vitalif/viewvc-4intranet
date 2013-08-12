@@ -144,8 +144,6 @@ class GlobalAuthClient:
     if r_id:
       r_id = r_id.value
     ga_id = self.v.get('ga_id', '')
-    self.log('vars: '+anyjson.serialize(self.v))
-    self.log('ga_client? '+self.v.get('ga_client', ''))
     if self.v.get('ga_client', ''):
       self.ga_client(r_id, ga_id)
       return
@@ -165,8 +163,6 @@ class GlobalAuthClient:
 
   def ga_client(self, r_id, ga_id):
     ga_key = self.v.get('ga_key', '')
-    self.log('vars: '+anyjson.serialize(self.v))
-    self.log('s2s? '+ga_key+' '+self.cache.get('K'+ga_id))
     if ga_key and ga_key == self.cache.get('K'+ga_id):
       # Server-to-server request
       self.cache.delete('K'+ga_id)
@@ -191,8 +187,7 @@ class GlobalAuthClient:
         except: d = ''
       if d != '':
         self.setcookie(ga_id)
-        self.server.redirect(self.clean_uri())
-        sys.exit()
+        self.redirect(self.clean_uri())
     self.server.header('text/plain', status=404)
     self.server.write('GlobalAuth key doesn\'t match')
     sys.exit()
@@ -208,16 +203,14 @@ class GlobalAuthClient:
         raise Exception(resp)
     except:
       self.setcookie('nologin')
-      self.server.redirect(self.clean_uri())
-      sys.exit()
+      self.redirect(self.clean_uri())
     return_uri = 'http://'+self.server.getenv('HTTP_HOST')+self.server.getenv('REQUEST_URI')
     return_uri = self.add_param(return_uri, 'ga_client=1')
     self.cache.set('K'+ga_id, ga_key)
     url = url+'ga_id='+urllib2.quote(ga_id)+'&ga_url='+urllib2.quote(return_uri)
     if self.v.get('ga_require', '') == '' and not self.gac['ga_always_require']:
       url = url+'&ga_check=1'
-    self.server.redirect(url)
-    sys.exit()
+    self.redirect(url)
 
   def add_param(self, url, param):
     if url.find('?') != -1:
@@ -250,10 +243,16 @@ class GlobalAuthClient:
     sys.stderr.write(s+"\n")
     sys.stderr.flush()
 
+  def redirect(self, url):
+    self.server.addheader('Location', url)
+    self.server.header(status='302 Moved Temporarily')
+    self.server.write('This document is located <a href="%s">here</a>.' % url)
+    sys.exit()
+
   def setcookie(self, value):
     dom = self.gac['cookie_domain']
     if not dom:
-      dom = server.getenv('HTTP_HOST')
+      dom = self.server.getenv('HTTP_HOST')
     exp = ''
     if self.gac['cookie_expire'] > 0:
       tm = int(time.time()+self.gac['cookie_expire'])
