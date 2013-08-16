@@ -451,5 +451,7 @@ def check_path_access(repos, path_parts, pathtype=None, rev=None):
     return 1
   if not pathtype:
     pathtype = repos.itemtype(path_parts, rev)
+  if not path_parts:
+    return auth.check_root_access(repos.rootname())
   return auth.check_path_access(repos.rootname(), path_parts, pathtype, rev)
 
