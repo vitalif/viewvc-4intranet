@@ -4769,7 +4769,7 @@ def build_commit(request, files, max_files, dir_strip, format):
     commit.short_log = None
   else:
     lf = LogFormatter(request, desc)
-    htmlize = (format != 'rss')
+    htmlize = (format != 'rss' and format != 'custispatcher')
     commit.log = lf.get(maxlen=0, htmlize=htmlize)
     commit.short_log = lf.get(maxlen=cfg.options.short_log_len, htmlize=htmlize)
   commit.author = request.server.escape(author)
@@ -4958,7 +4958,7 @@ def custispatcher_slug(commits):
               '  <proc name="ini"/>\n  <proc name="ini-gen"/>\n</put>\n'
           by_fn[fn] = [s, fileinfo.rev, schema]
     if found:
-      msg = re.sub(r'<[^>]*?>', '', commit.short_log).replace('&nbsp;', ' ').strip()
+      msg = re.sub(r'<[^>]*?>', '', commit.log).replace('&nbsp;', ' ').strip()
       b = bugmsg.match(msg)
       if b:
         bugs[b.group(1)] = 1
@@ -4983,7 +4983,7 @@ def custispatcher_slug(commits):
   return r, bugs
 
 def query_custispatcher(request, commits):
-  request.server.header('text/plain')
+  request.server.header('text/plain; charset=utf-8')
   if not commits:
     print '# No changes were selected by the query.'
     print '# There is nothing to show.'
@@ -5015,8 +5015,8 @@ def query_custispatcher(request, commits):
     '+r.rstrip().replace('\n', '\n    ')+'\n\
   </portion>\n\
 </hotfix>\n'
-  server_fp = get_writeready_server_file(request, 'text/plain')
-  server_fp.write(r)
+  server_fp = get_writeready_server_file(request, 'text/plain; charset=utf-8')
+  server_fp.write(r.encode('utf-8'))
 
 def found_custispatcher_sp4(commits):
   for commit in commits:
