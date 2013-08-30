@@ -5010,7 +5010,7 @@ def query_custispatcher(request, commits):
       except:
         raise
     r = '<hotfix name="bug'+'_'.join(extbugs)+'" for-versions="" bugs="'+' '.join(bugs)+'">\n\
-  <description>'+cgi.escape(ext_descs.rstrip())+'</description>\n\
+  <description>'+cgi.escape(ext_descs.rstrip().decode('utf-8'))+'</description>\n\
   <portion num="" repeatable="1" deploy-safety="dangerous">\n\
     '+r.rstrip().replace('\n', '\n    ')+'\n\
   </portion>\n\
