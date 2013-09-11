@@ -265,7 +265,11 @@ class GlobalAuthClient:
     uriargs = self.v.copy()
     for i in [ 'ga_id', 'ga_res', 'ga_key', 'ga_client', 'ga_nologin', 'ga_require' ]:
       uriargs.pop(i, None)
-    uri = 'http://'+self.server.getenv('HTTP_HOST')+self.server.getenv('SCRIPT_NAME')+'?'+urllib.urlencode(uriargs)
+    uri = self.server.getenv('REQUEST_URI')
+    p = uri.find('?')
+    if p != -1:
+      uri = uri[0:p]
+    uri = 'http://'+self.server.getenv('HTTP_HOST')+uri+'?'+urllib.urlencode(uriargs)
     return uri
 
   def set_user(self, r_data):
