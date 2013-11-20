@@ -459,7 +459,6 @@ class Config:
     self.options.log_pagesextra = 3
     self.options.limit_changes = 100
     self.options.cvs_ondisk_charset = 'cp1251'
-    self.options.binary_mime_re = '^(?!text/|.*\Wxml)'
     self.options.encodings = 'cp1251:iso-8859-1'
 
     self.templates.diff = None

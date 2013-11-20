@@ -106,7 +106,6 @@ class Request:
   def __init__(self, server, cfg):
     self.server = server
     self.cfg = cfg
-    self.cfg.options.binary_mime_re = re.compile(self.cfg.options.binary_mime_re)
 
     self.script_name = _normalize_path(server.getenv('SCRIPT_NAME', ''))
     self.browser = server.getenv('HTTP_USER_AGENT', 'unknown')
@@ -1105,9 +1104,6 @@ def guess_mime(filename):
 
 def is_viewable_image(mime_type):
   return mime_type and mime_type in ('image/gif', 'image/jpeg', 'image/png')
-
-def is_binary(cfg, mime_type):
-  return mime_type and re.match(cfg.options.binary_mime_re, mime_type)
 
 def is_text(mime_type):
   return not mime_type or mime_type[:5] == 'text/'
