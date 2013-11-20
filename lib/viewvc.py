@@ -296,9 +296,11 @@ class Request:
         self.repos = rcr.repos
         self.rootpath = rcr.rootpath
         self.auth = rcr.auth
+
         # Overlay root-specific options.
-        cfg.overlay_root_options(self.rootname)
-        
+        cfg = cfg.get_root_config(self)
+        self.cfg = cfg
+
         # Setup an Authorizer for this rootname and username
         debug.t_start('setup-authorizer')
         self.auth = setup_authorizer(cfg, self.username)
@@ -896,12 +898,12 @@ def setup_authorizer(cfg, username, rootname=None):
   """Setup the authorizer.  If ROOTNAME is provided, assume that
   per-root options have not been overlayed.  Otherwise, assume they
   have (and fetch the authorizer for the configured root)."""
-  
-  if rootname is None:
-    authorizer = cfg.options.authorizer
-    params = cfg.get_authorizer_params()
-  else:
-    authorizer, params = cfg.get_authorizer_and_params_hack(rootname)
+
+  if rootname is not None:
+    cfg = cfg.get_root_config(rootname)
+
+  authorizer = cfg.options.authorizer
+  params = cfg.get_authorizer_params()
 
   # No configured authorizer?  No problem.
   if not authorizer:

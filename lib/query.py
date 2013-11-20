@@ -300,11 +300,10 @@ def is_forbidden(cfg, cvsroot_name, module):
     # the base and per-vhost configuration for authorizer and
     # authorizer parameters.
     if cvsroot_name:
-        authorizer, params = cfg.get_authorizer_and_params_hack(cvsroot_name)
-    else:
-        authorizer = cfg.options.authorizer
-        params = cfg.get_authorizer_params()
-        
+        cfg = cfg.get_root_config(cvsroot_name)
+    authorizer = cfg.options.authorizer
+    params = cfg.get_authorizer_params()
+
     # If CVSROOT_NAME isn't configured to use an authorizer, nothing
     # is forbidden.  If it's configured to use something other than
     # the 'forbidden' authorizer, complain.  Otherwise, check for
