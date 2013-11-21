@@ -19,9 +19,13 @@
   * File lists in RSS feeds for 'classic' template.
   * Path configuration via a single 'viewvcinstallpath.py' file,
     not via editing multiple bin/* files.
-  * Link to repository list instead of viewvc.org from the logo
+  * Link to repository list instead of viewvc.org from the logo.
   * "rcsfile service" support used to workaround command execution
-    problems (forks) from Apache mod_python.
+    problems (fork/signal problems) from Apache mod_python.
+  * Some new fields in query form: revision number, repository,
+    repository type, and the branch field visible not only in
+    CVS roots, but also without the selected repository.
+  * Correct per-root overriding of configuration options.
 
 Version 1.2.0 (released ??-???-????)
 
