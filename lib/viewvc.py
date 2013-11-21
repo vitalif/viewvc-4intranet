@@ -54,7 +54,10 @@ import vclib
 import vclib.ccvs
 import vclib.svn
 
-import globalauth
+try:
+  import globalauth
+except ImportError:
+  globalauth = None
 
 try:
   import idiff
@@ -124,7 +127,7 @@ class Request:
     self.username = server.getenv('REMOTE_USER')
 
     self.user_url = ''
-    if not self.username:
+    if not self.username and globalauth:
       # try to authenticate using SimpleGlobalAuth
       c = globalauth.GlobalAuthClient(server)
       c.auth()
