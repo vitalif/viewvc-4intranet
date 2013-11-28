@@ -183,6 +183,12 @@ class Request:
                                                authorizer,
                                                self.cfg.utilities,
                                                self.cfg.options.svn_config_dir)
+      elif roottype == 'git':
+        rootpath = vclib.git.canonicalize_rootpath(rootpath)
+        repos = vclib.git.LocalGitRepository(rootname,
+                                             rootpath,
+                                             authorizer,
+                                             self.cfg.utilities)
       else:
         return None
 
@@ -329,6 +335,12 @@ class Request:
                                                         self.auth,
                                                         cfg.utilities,
                                                         cfg.options.svn_config_dir)
+          elif roottype == 'git':
+            self.rootpath = vclib.git.canonicalize_rootpath(rootpath)
+            self.repos = vclib.git.LocalGitRepository(self.rootname,
+                                                 self.rootpath,
+                                                 self.auth,
+                                                 cfg.utilities)
           else:
             raise vclib.ReposNotFound()
         except vclib.ReposNotFound:
@@ -5251,7 +5263,16 @@ def list_roots(request):
     except vclib.ReposNotFound:
       continue
     allroots[root] = [cfg.general.cvs_roots[root], 'cvs', None]
-    
+
+  # Add the viewable Git roots
+  for root in cfg.general.git_roots.keys():
+    auth = setup_authorizer(cfg, request.username, root)
+    try:
+      vclib.git.LocalGitRepository(root, cfg.general.git_roots[root], auth, cfg.utilities)
+    except vclib.ReposNotFound:
+      continue
+    allroots[root] = [cfg.general.git_roots[root], 'git', None]
+
   return allroots
 
 def expand_root_parents(cfg):

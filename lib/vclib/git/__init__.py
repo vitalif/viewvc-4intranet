@@ -67,7 +67,7 @@ def temp_checkout(blob):
   return temp
 
 class LocalGitRepository(vclib.Repository):
-  def __init__(self, name, rootpath, authorizer, utilities, config_dir):
+  def __init__(self, name, rootpath, authorizer, utilities):
     if not (os.path.isdir(rootpath) and (
         os.path.isdir(os.path.join(rootpath, '.git')) or os.path.isfile(os.path.join(rootpath, '.git', 'config')))):
       raise vclib.ReposNotFound(name)
@@ -77,7 +77,6 @@ class LocalGitRepository(vclib.Repository):
     self.name = name
     self.auth = authorizer
     self.diff_cmd = utilities.diff or 'diff'
-    self.config_dir = config_dir or None
 
     # See if this repository is even viewable, authz-wise.
     if not vclib.check_root_access(self):

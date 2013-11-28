@@ -120,6 +120,7 @@ class Config:
     'binary_mime_types',
     'custom_log_formatting',
     'cvs_roots',
+    'git_roots',
     'kv_files',
     'languages',
     'mime_types_files',
@@ -226,7 +227,7 @@ class Config:
 
       ### FIXME: This feels like unnecessary depth of knowledge for a
       ### semi-generic configuration object.
-      if opt == 'cvs_roots' or opt == 'svn_roots':
+      if opt == 'cvs_roots' or opt == 'svn_roots' or opt == 'git_roots':
         value = _parse_roots(opt, value)
 
       setattr(sc, opt, value)
@@ -373,6 +374,7 @@ class Config:
 
     self.general.cvs_roots = { }
     self.general.svn_roots = { }
+    self.general.git_roots = { }
     self.general.root_parents = []
     self.general.default_root = ''
     self.general.mime_types_files = ["mimetypes.conf"]
