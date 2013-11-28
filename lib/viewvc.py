@@ -53,6 +53,7 @@ import vcauth
 import vclib
 import vclib.ccvs
 import vclib.svn
+import vclib.git
 
 try:
   import globalauth
@@ -184,7 +185,6 @@ class Request:
                                                self.cfg.utilities,
                                                self.cfg.options.svn_config_dir)
       elif roottype == 'git':
-        rootpath = vclib.git.canonicalize_rootpath(rootpath)
         repos = vclib.git.LocalGitRepository(rootname,
                                              rootpath,
                                              authorizer,
@@ -335,8 +335,7 @@ class Request:
                                                         self.auth,
                                                         cfg.utilities,
                                                         cfg.options.svn_config_dir)
-          elif roottype == 'git':
-            self.rootpath = vclib.git.canonicalize_rootpath(rootpath)
+          elif self.repos.roottype() == 'git':
             self.repos = vclib.git.LocalGitRepository(self.rootname,
                                                  self.rootpath,
                                                  self.auth,
@@ -361,9 +360,11 @@ class Request:
         self.roottype = 'svn'
       elif type == vclib.CVS:
         self.roottype = 'cvs'
+      elif type == vclib.GIT:
+        self.roottype = 'git'
       else:
         raise debug.ViewVCException(
-          'The root "%s" has an unknown type ("%s").  Expected "cvs" or "svn".'
+          'The root "%s" has an unknown type ("%s").  Expected "cvs", "svn" or "git".'
           % (self.rootname, type),
           "500 Internal Server Error")
       
@@ -5335,6 +5336,7 @@ def find_root_in_parents(cfg, rootname, roottype):
 def locate_root(cfg, rootname):
   """Return a 3-tuple ROOTTYPE, ROOTPATH, ROOTNAME for configured ROOTNAME.
   ROOTNAME can be a path initially"""
+
   if cfg.general.cvs_roots.has_key(rootname):
     return 'cvs', cfg.general.cvs_roots[rootname], rootname
   for (k, v) in cfg.general.cvs_roots.iteritems():
@@ -5344,6 +5346,7 @@ def locate_root(cfg, rootname):
   if path_in_parent:
     cfg.general.cvs_roots[rootname_in_parent] = path_in_parent
     return 'cvs', path_in_parent, rootname_in_parent
+
   if cfg.general.svn_roots.has_key(rootname):
     return 'svn', cfg.general.svn_roots[rootname], rootname
   for (k, v) in cfg.general.svn_roots.iteritems():
@@ -5353,6 +5356,17 @@ def locate_root(cfg, rootname):
   if path_in_parent:
     cfg.general.svn_roots[rootname_in_parent] = path_in_parent
     return 'svn', path_in_parent, rootname_in_parent
+
+  if cfg.general.git_roots.has_key(rootname):
+    return 'git', cfg.general.git_roots[rootname], rootname
+  for (k, v) in cfg.general.git_roots.iteritems():
+    if v == rootname:
+      return 'git', rootname, k
+  path_in_parent, rootname_in_parent = find_root_in_parents(cfg, rootname, 'git')
+  if path_in_parent:
+    cfg.general.git_roots[rootname_in_parent] = path_in_parent
+    return 'git', path_in_parent, rootname_in_parent
+
   return None, None, None
 
 def load_config(pathname=None, server=None):

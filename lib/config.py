@@ -21,6 +21,7 @@ import fnmatch
 import vclib
 import vclib.ccvs
 import vclib.svn
+import vclib.git
 import cvsdb
 import viewvc
 import copy

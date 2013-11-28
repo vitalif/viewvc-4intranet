@@ -84,7 +84,7 @@ class LocalGitRepository(vclib.Repository):
 
   def open(self):
     # Open the repository and init some other variables.
-    self.repos = Repo(self.rootpath)
+    self.repo = Repo(self.rootpath)
 
     # See if a universal read access determination can be made.
     if self.auth and self.auth.check_universal_access(self.name) == 1:
@@ -115,7 +115,10 @@ class LocalGitRepository(vclib.Repository):
     if f.type != 'tree':
       raise vclib.Error("Path '%s' is not a directory." % self._getpath(path))
     entries = []
-    for i in f.tree:
+    path = self._getpath(path_parts)
+    if path:
+      path = path+'/'
+    for i in f:
       if i.type == 'tree':
         kind = vclib.DIR
       else:
@@ -123,7 +126,7 @@ class LocalGitRepository(vclib.Repository):
       if vclib.check_path_access(self, path_parts + [ i.name ], kind, rev):
         e = vclib.DirEntry(i.name, kind)
         # <dirlogs>
-        h = self.repo.iter_commits(rev, path+'/'+i.name).next()
+        h = self.repo.iter_commits(c.hexsha, path+i.name).next()
         e.rev = h.binsha
         e.date = h.authored_date
         e.author = h.author
@@ -136,7 +139,7 @@ class LocalGitRepository(vclib.Repository):
     pass
 
   def itemlog(self, path_parts, rev, sortby, first, limit, options):
-    assert sortby == vclib.SORTBY_DEFAULT or sortby == vclib.SORTBY_REV
+    # FIXME sortby has no effect
     path = self._getpath(path_parts)
     path_type = self.itemtype(path_parts, rev)  # does auth-check
     c = self.repo.iter_commits(rev, path)
@@ -160,7 +163,7 @@ class LocalGitRepository(vclib.Repository):
 
   def itemprops(self, path_parts, rev):
     c, f, t = self._obj(path_parts, rev) # does authz-check
-    return { filemode: f.mode }
+    return { 'filemode': "0%o" % f.mode }
 
   def annotate(self, path_parts, rev, include_text=False):
     path = self._getpath(path_parts)
@@ -241,10 +244,13 @@ class LocalGitRepository(vclib.Repository):
   def _obj(self, path_parts, rev):
     c = self.repo.commit(rev)
     f = c.tree
-    for i in path_parts:
-      if f.type != 'blob':
+    for i in path_parts[:-1]:
+      if not f or f.type != 'tree':
         raise vclib.ItemNotFound(path_parts)
       f = f[i]
+    f = f[path_parts[-1]]
+    if not f:
+      raise vclib.ItemNotFound(path_parts)
     if f.type == 'blob':
       t = vclib.FILE
     else:
