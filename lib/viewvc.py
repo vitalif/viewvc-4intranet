@@ -2902,6 +2902,14 @@ def view_log(request):
                                           params={'pathrev': rev.copy_rev},
                                           escape=1)
 
+    elif request.roottype == 'git':
+      entry.prev = None
+      entry.branches = entry.tags = entry.branch_points = []
+      entry.tag_names = entry.branch_names = [ ]
+      entry.vendor_branch = None
+      entry.orig_path = None
+      entry.copy_path = entry.copy_rev = None
+
 
     # view/download links
     if pathtype is vclib.FILE:

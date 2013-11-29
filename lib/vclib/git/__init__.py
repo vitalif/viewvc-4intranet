@@ -66,6 +66,24 @@ def temp_checkout(blob):
   fp.close()
   return temp
 
+class OStreamWrapper:
+
+  def __init__(self, fp):
+    self.fp = fp
+
+  def read(self, bytes):
+    return self.fp.read(bytes)
+
+  def readlines(self):
+    text = self.fp.read()
+    return text.rstrip().split('\n')
+
+  def close(self):
+    pass
+
+  def __del__(self):
+    self.close()
+
 class LocalGitRepository(vclib.Repository):
   def __init__(self, name, rootpath, authorizer, utilities):
     if not (os.path.isdir(rootpath) and (
@@ -108,7 +126,7 @@ class LocalGitRepository(vclib.Repository):
 
   def openfile(self, path_parts, rev, options):
     c, f, t = self._obj(path_parts, rev) # does authz-check
-    return f.data_stream, c.hexsha
+    return OStreamWrapper(f.data_stream), c.hexsha
 
   def listdir(self, path_parts, rev, options):
     c, f, t = self._obj(path_parts, rev) # does authz-check
@@ -131,6 +149,7 @@ class LocalGitRepository(vclib.Repository):
         e.date = h.authored_date
         e.author = h.author
         e.log = h.message
+        e.lockinfo = None
         # </dirlogs>
         entries.append(e)
     return entries
@@ -155,7 +174,7 @@ class LocalGitRepository(vclib.Repository):
           s = f.size
         else:
           s = 0
-        revs.push(Revision(c.authored_date, c.hexsha, c.authored_date, c.author, c.authored_date, c.message, s, None))
+        revs.append(vclib.Revision(c.authored_date, c.hexsha, c.authored_date, c.author, c.authored_date, c.message, s, None))
       i = i+1
       if i >= first+limit:
         break
@@ -244,13 +263,14 @@ class LocalGitRepository(vclib.Repository):
   def _obj(self, path_parts, rev):
     c = self.repo.commit(rev)
     f = c.tree
-    for i in path_parts[:-1]:
-      if not f or f.type != 'tree':
+    if path_parts:
+      for i in path_parts[:-1]:
+        if not f or f.type != 'tree':
+          raise vclib.ItemNotFound(path_parts)
+        f = f[i]
+      f = f[path_parts[-1]]
+      if not f:
         raise vclib.ItemNotFound(path_parts)
-      f = f[i]
-    f = f[path_parts[-1]]
-    if not f:
-      raise vclib.ItemNotFound(path_parts)
     if f.type == 'blob':
       t = vclib.FILE
     else:
@@ -273,12 +293,12 @@ class LocalGitRepository(vclib.Repository):
     diff = old.diff(rev)
     old_path = None
     for i in diff:
-      if i.b_blob.path == path:
+      if i.b_blob and i.b_blob.path == path:
         old_path = i.a_blob.path
       elif i.rename_to == path:
         old_path = i.rename_from
     if old_path is None:
-      raise vclib.ItemNotFound(path)
+      return path
     return _cleanup_path(old_path)
 
   def get_symlink_target(self, path_parts, rev):
