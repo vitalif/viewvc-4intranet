@@ -2903,7 +2903,7 @@ def view_log(request):
                                           escape=1)
 
     elif request.roottype == 'git':
-      entry.prev = None
+      entry.prev = rev.prev
       entry.branches = entry.tags = entry.branch_points = []
       entry.tag_names = entry.branch_names = [ ]
       entry.vendor_branch = None
@@ -3614,14 +3614,15 @@ def setup_diff(request):
   p1 = _get_diff_path_parts(request, 'p1', rev1, request.pathrev)
   p2 = _get_diff_path_parts(request, 'p2', rev2, request.pathrev)
 
-  try:
-    if revcmp(rev1, rev2) > 0:
-      rev1, rev2 = rev2, rev1
-      sym1, sym2 = sym2, sym1
-      p1, p2 = p2, p1
-  except ValueError:
-    raise debug.ViewVCException('Invalid revision(s) passed to diff',
-                                 '400 Bad Request')
+  if request.roottype != 'git':
+    try:
+      if revcmp(rev1, rev2) > 0:
+        rev1, rev2 = rev2, rev1
+        sym1, sym2 = sym2, sym1
+        p1, p2 = p2, p1
+    except ValueError:
+      raise debug.ViewVCException('Invalid revision(s) passed to diff',
+                                   '400 Bad Request')
   return p1, p2, rev1, rev2, sym1, sym2
 
 

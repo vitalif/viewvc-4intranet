@@ -147,7 +147,7 @@ class LocalGitRepository(vclib.Repository):
         h = self.repo.iter_commits(c.hexsha, path+i.name).next()
         e.rev = h.binsha
         e.date = h.authored_date
-        e.author = h.author
+        e.author = h.author.name + ' <' + h.author.email + '>'
         e.log = h.message
         e.lockinfo = None
         # </dirlogs>
@@ -165,6 +165,7 @@ class LocalGitRepository(vclib.Repository):
     # FIXME (???) Include c.name_rev into data? (it's the symbolic commit name based on closest reference)
     revs = []
     i = 0
+    prev_rev = None
     for c in self.repo.iter_commits(rev, path):
       if i >= first:
         if path_type == vclib.FILE:
@@ -174,10 +175,17 @@ class LocalGitRepository(vclib.Repository):
           s = f.size
         else:
           s = 0
-        revs.append(vclib.Revision(c.authored_date, c.hexsha, c.authored_date, c.author, c.authored_date, c.message, s, None))
+        # FIXME we only take the first parent...
+        rev = vclib.Revision(c.authored_date, c.hexsha, c.authored_date,
+          c.author.name + ' <' + c.author.email + '>', c.authored_date, c.message, s, None)
+        if prev_rev:
+          prev_rev.prev = c.hexsha
+        prev_rev = rev
+        revs.append(rev)
       i = i+1
-      if i >= first+limit:
+      if limit > 0 and i >= first+limit:
         break
+    prev_rev.prev = None
     return revs
 
   def itemprops(self, path_parts, rev):
@@ -197,8 +205,8 @@ class LocalGitRepository(vclib.Repository):
       if youngest_rev is None or youngest_rev.authored_date > commit.authored_date:
         youngest_rev = commit
       for line in lines:
-        # prev_rev=None
-        source.append(vclib.Annotation(line, line_num, commit.hexsha, None, commit.author, commit.authored_date))
+        prev_rev = None
+        source.append(vclib.Annotation(line, line_num, commit.hexsha, prev_rev, commit.author, commit.authored_date))
         line_num = line_num+1
     return source, youngest_rev.hexsha
 
@@ -231,15 +239,15 @@ class LocalGitRepository(vclib.Repository):
     else:
       f2 = None
     args = vclib._diff_args(type, options)
-    if p1:
+    if f1:
       temp1 = temp_checkout(f1)
-      info1 = p1, c1.authored_date, r1
+      info1 = self._getpath(path_parts1), c1.authored_date, rev1
     else:
       temp1 = '/dev/null'
       info1 = '/dev/null', '', rev1
-    if p2:
+    if f2:
       temp2 = temp_checkout(f2)
-      info2 = p2, c2.authored_date, r2
+      info2 = self._getpath(path_parts2), c2.authored_date, rev2
     else:
       temp2 = '/dev/null'
       info2 = '/dev/null', '', rev1
