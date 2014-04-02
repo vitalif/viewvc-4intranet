@@ -3607,7 +3607,6 @@ def view_patch(request):
                                  '403 Forbidden')
 
   cfg = request.cfg
-  query_dict = request.query_dict
   p1, p2, rev1, rev2, sym1, sym2 = setup_diff(request)
 
   mime_type1, encoding1 = calculate_mime_type(request, p1, rev1)
@@ -3617,28 +3616,20 @@ def view_patch(request):
     raise debug.ViewVCException('Display of binary file content disabled '
                                 'by configuration', '403 Forbidden')
 
-  # In the absence of a format dictation in the CGI params, we'll let
-  # use the configured diff format, allowing 'c' to mean 'c' and
-  # anything else to mean 'u'.
-  format = query_dict.get('diff_format',
-                          cfg.options.diff_format == 'c' and 'c' or 'u')
-  if format == 'c':
-    diff_type = vclib.CONTEXT
-  elif format == 'u':
-    diff_type = vclib.UNIFIED
-  else:
-    raise debug.ViewVCException('Diff format %s not understood'
-                                 % format, '400 Bad Request')
+  left_side_content, left_side_prop = diff_side_item(request, p1, rev1, sym1)
+  right_side_content, right_side_prop = diff_side_item(request, p2, rev2, sym2)
+
+  desc = DiffDescription(request)
 
   try:
-    fp = request.repos.rawdiff(p1, rev1, p2, rev2, diff_type, diff_options)
+    fp = desc._content_fp(left_side_content, right_side_content, None, desc._content_options())
   except vclib.InvalidRevision:
     raise debug.ViewVCException('Invalid path(s) or revision(s) passed '
                                  'to diff', '400 Bad Request')
 
   path_left = _path_join(p1)
   path_right = _path_join(p2)
-  date1, date2, flag, headers = diff_parse_headers(fp, diff_type,
+  date1, date2, flag, headers = diff_parse_headers(fp, desc.diff_type,
                                                    path_left, path_right,
                                                    rev1, rev2, sym1, sym2)
 
@@ -3766,17 +3757,8 @@ class DiffDescription:
     self.changes.append(_item(diff_block_format='anchor', anchor=anchor_name))
 
   def get_content_diff(self, left, right):
-    diff_options = {}
-    if self.context != -1:
-      diff_options['context'] = self.context
-    if self.human_readable:
-      cfg = self.request.cfg
-      diff_options['funout'] = cfg.options.hr_funout
-      diff_options['ignore_white'] = cfg.options.hr_ignore_white
-      diff_options['ignore_keyword_subst'] = \
-                      cfg.options.hr_ignore_keyword_subst
     self._get_diff(left, right, self._content_lines, self._content_fp,
-                   diff_options, None)
+                   self._content_options(), None)
 
   def get_prop_diff(self, left, right):
     diff_options = {}
@@ -3857,6 +3839,18 @@ class DiffDescription:
     finally:
       f.close()
     return lines
+
+  def _content_options(self):
+    diff_options = {}
+    if self.context != -1:
+      diff_options['context'] = self.context
+    if self.human_readable:
+      cfg = self.request.cfg
+      diff_options['funout'] = cfg.options.hr_funout
+      diff_options['ignore_white'] = cfg.options.hr_ignore_white
+      diff_options['ignore_keyword_subst'] = \
+                      cfg.options.hr_ignore_keyword_subst
+    return diff_options
 
   def _content_fp(self, left, right, propname, diff_options):
     return self.request.repos.rawdiff(left.path_comp, left.rev,
