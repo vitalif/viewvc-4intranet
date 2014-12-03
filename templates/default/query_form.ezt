@@ -152,7 +152,7 @@ Browse Directory</a></p>
     <th style="text-align:right;vertical-align:top;">Comment:</th>
     <td>
       <input type="text" name="comment" value="[comment]" size="40" /><br />
-      <label for="comment_match_exact">
+      <label for="comment_match_fulltext">
         <input type="radio" name="comment_match" id="comment_match_fulltext"
            value="fulltext" [is comment_match "fulltext"]checked=""[end] />
         Search full-text
