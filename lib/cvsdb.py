@@ -447,7 +447,7 @@ class CheckinDatabase:
                 match = " LIKE "
             elif query_entry.match == "glob":
                 # check if the match is exact
-                if not re.match(r'(\*|\?|\[.*\])', data):
+                if not re.search(r'[*?]', data):
                     # most optimal is just '=' for exact matches
                     match = "="
                 else:
